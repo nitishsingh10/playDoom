@@ -62,12 +62,12 @@ class DoomAgent:
 
         from submission.model import build_policy  # noqa: PLC0415
         from submission.checkpoint import (  # noqa: PLC0415
-            CheckpointCompatibilityError, STRUCTURED_ARCHITECTURE_ID, load_policy_state,
+            CheckpointCompatibilityError, STRUCTURED_ARCHITECTURES, load_policy_state,
         )
 
-        if self.config.architecture_id != STRUCTURED_ARCHITECTURE_ID:
+        if self.config.architecture_id not in STRUCTURED_ARCHITECTURES:
             raise CheckpointCompatibilityError(
-                "DoomAgent requires doom_structured_v1. Use training.evaluate --legacy-baseline "
+                "DoomAgent requires a versioned structured policy. Use training.evaluate --legacy-baseline "
                 "for an explicit comparison of preserved nine-logit weights."
             )
 

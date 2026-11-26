@@ -15,7 +15,7 @@ import torch
 from doom_env import make_env, spaces as doom_spaces
 from submission.actions import StructuredActionDistribution
 from submission.checkpoint import (
-    LEGACY_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURE_ID,
+    LEGACY_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURES,
     checkpoint_architecture, extract_state_dict, load_policy_state,
 )
 from submission.model import DoomPolicy
@@ -135,7 +135,8 @@ def load_policy(checkpoint_path: str | Path, device: str, *, legacy_baseline: bo
     # Training checkpoints contain optimizer/RNG state and are local trusted artifacts.
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
     architecture = checkpoint_architecture(checkpoint)
-    requested = LEGACY_ARCHITECTURE_ID if legacy_baseline else STRUCTURED_ARCHITECTURE_ID
+    requested = (LEGACY_ARCHITECTURE_ID if legacy_baseline else
+                 architecture if architecture in STRUCTURED_ARCHITECTURES else STRUCTURED_ARCHITECTURE_ID)
     if architecture != requested:
         hint = " Pass --legacy-baseline explicitly for a historical 9-logit baseline." if architecture == LEGACY_ARCHITECTURE_ID else ""
         raise ValueError(f"Checkpoint architecture {architecture!r} does not match requested {requested!r}.{hint}")
@@ -240,7 +241,7 @@ def evaluate_checkpoint(
     total_decisions = sum(r["decisions"] for r in records)
     return {
         "checkpoint": str(checkpoint_path),
-        "architecture_id": LEGACY_ARCHITECTURE_ID if legacy_baseline else STRUCTURED_ARCHITECTURE_ID,
+        "architecture_id": model.architecture_id,
         "action_mode": "stochastic" if stochastic else "deterministic",
         "action_threshold": action_threshold if legacy_baseline else None,
         "episode_ticks": episode_ticks, "episodes": len(records),

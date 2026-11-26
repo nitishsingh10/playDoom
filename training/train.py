@@ -22,6 +22,7 @@ import torch.optim as optim
 
 from training.checkpoint import load_checkpoint, save_checkpoint
 from training.ppo import compute_gae, ppo_update
+from submission.checkpoint import STRUCTURED_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURES
 
 
 def _flatten_time_batch(tree: Any) -> Any:
@@ -240,10 +241,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--map", type=str, default="MAP01")
     parser.add_argument("--episode-ticks", type=int, default=2100)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--save-dir", type=str, default="training/runs/structured_v1/checkpoints")
-    parser.add_argument("--log-dir", type=str, default="training/runs/structured_v1/logs")
+    parser.add_argument("--save-dir", type=str, default=None)
+    parser.add_argument("--log-dir", type=str, default=None)
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume")
+    parser.add_argument("--architecture", choices=sorted(STRUCTURED_ARCHITECTURES), default=STRUCTURED_ARCHITECTURE_ID,
+                        help="Explicit model variant; v1 remains default. Resume requires the same variant.")
     args = parser.parse_args(argv)
+    run_root = Path("training/runs") / args.architecture.removeprefix("doom_")
+    args.save_dir = args.save_dir or str(run_root / "checkpoints")
+    args.log_dir = args.log_dir or str(run_root / "logs")
 
     import numpy as np
     from submission.model import DoomPolicy
@@ -281,7 +287,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     })
     try:
         summary = train_loop(
-            DoomPolicy(), collector, config=config, resume_path=args.resume, metrics_logger=logger
+            DoomPolicy(architecture_id=args.architecture), collector, config=config,
+            resume_path=args.resume, metrics_logger=logger
         )
         logger.save_json("training_metrics.json")
         print(f"Training summary: {summary}")

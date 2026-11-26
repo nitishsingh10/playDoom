@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+import math
 
 import torch
 from torch import nn
 
 from doom_env import spaces as doom_spaces
 from submission.actions import NUM_ACTION_LOGITS
-from submission.checkpoint import LEGACY_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURE_ID
+from submission.checkpoint import (
+    DIRECTIONAL_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURE_ID,
+    STRUCTURED_ARCHITECTURES, SUPPORTED_ARCHITECTURES,
+)
 from submission.observation import ObservationEncoder
 
 
@@ -25,15 +29,22 @@ class DoomPolicy(nn.Module):
         architecture_id: str = STRUCTURED_ARCHITECTURE_ID,
     ):
         super().__init__()
-        if architecture_id not in (STRUCTURED_ARCHITECTURE_ID, LEGACY_ARCHITECTURE_ID):
+        if architecture_id not in SUPPORTED_ARCHITECTURES:
             raise ValueError(f"Unknown policy architecture: {architecture_id!r}")
         # The legacy architecture is available only for explicit baseline comparisons.
         self.architecture_id = architecture_id
         self.hidden_size = hidden_size
         self.fusion_size = fusion_size
         self.observation_encoder = ObservationEncoder()
+        directional = architecture_id == DIRECTIONAL_ARCHITECTURE_ID
+        if directional:
+            # Match Sensors: ray k points at heading + k*2*pi/64. Positive
+            # angles turn left; channels are sin/cos, as for visible entities.
+            angles = torch.arange(doom_spaces.NUM_RAYS, dtype=torch.float64) * (math.tau / doom_spaces.NUM_RAYS)
+            self.register_buffer("ray_directions", torch.stack((angles.sin(), angles.cos()), -1).float(),
+                                 persistent=False)
         self.ray_encoder = nn.Sequential(
-            nn.Linear(1 + len(doom_spaces.RAY_HIT_TYPES), hidden_size),
+            nn.Linear(1 + len(doom_spaces.RAY_HIT_TYPES) + (2 if directional else 0), hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
             nn.ReLU(),
@@ -59,7 +70,7 @@ class DoomPolicy(nn.Module):
             nn.Linear(fusion_size, hidden_size * 2),
             nn.ReLU(),
         )
-        output_size = NUM_ACTION_LOGITS if architecture_id == STRUCTURED_ARCHITECTURE_ID else len(doom_spaces.BUTTONS)
+        output_size = NUM_ACTION_LOGITS if architecture_id in STRUCTURED_ARCHITECTURES else len(doom_spaces.BUTTONS)
         self.actor = nn.Linear(hidden_size * 2, output_size)
         self.critic = nn.Linear(hidden_size * 2, 1)
 
@@ -93,6 +104,9 @@ class DoomPolicy(nn.Module):
         entity_mask = encoded_obs["entity_mask"].bool()
         vitals = encoded_obs["vitals"]
 
+        if self.architecture_id == DIRECTIONAL_ARCHITECTURE_ID:
+            directions = self.ray_directions.to(dtype=rays.dtype).unsqueeze(0).expand(rays.shape[0], -1, -1)
+            rays = torch.cat((rays, directions), dim=-1)
         ray_embedding = self.ray_encoder(rays)
         ray_summary = self._pool(ray_embedding)
 

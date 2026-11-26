@@ -12,8 +12,8 @@ import torch
 
 from submission.checkpoint import (
     CHECKPOINT_VERSION,
-    LEGACY_ARCHITECTURE_ID,
-    STRUCTURED_ARCHITECTURE_ID,
+    DIRECTIONAL_ARCHITECTURE_ID,
+    SUPPORTED_ARCHITECTURES,
     CheckpointCompatibilityError,
     checkpoint_architecture,
     extract_state_dict,
@@ -46,18 +46,23 @@ def export_checkpoint(
     from submission.model import DoomPolicy
     from submission.schema import PolicyConfig
 
-    output = Path(destination) if destination is not None else DEFAULT_EXPORT_PATH
+    if destination is not None:
+        _guard_destination(Path(destination))
+    checkpoint = torch.load(source, map_location="cpu", weights_only=False)
+    state_dict = extract_state_dict(checkpoint)
+    architecture_id = checkpoint_architecture(checkpoint)
+    if architecture_id not in SUPPORTED_ARCHITECTURES:
+        raise CheckpointCompatibilityError("Cannot export an unidentified DoomPolicy architecture.")
+    default_output = (
+        Path("training/runs/structured_ray_v2/export/checkpoint.pt")
+        if architecture_id == DIRECTIONAL_ARCHITECTURE_ID else DEFAULT_EXPORT_PATH
+    )
+    output = Path(destination) if destination is not None else default_output
     _guard_destination(output)
     if output.name == "config.json":
         raise ValueError("Export destination cannot be named config.json (reserved for policy configuration).")
     if output.resolve() == Path(source).resolve():
         raise ValueError("Export destination must differ from the resumable source checkpoint.")
-    checkpoint = torch.load(source, map_location="cpu", weights_only=False)
-    state_dict = extract_state_dict(checkpoint)
-    architecture_id = checkpoint_architecture(checkpoint)
-    if architecture_id not in {STRUCTURED_ARCHITECTURE_ID, LEGACY_ARCHITECTURE_ID}:
-        raise CheckpointCompatibilityError("Cannot export an unidentified DoomPolicy architecture.")
-
     saved_config = checkpoint.get("config", {})
     model_config = checkpoint.get("model_config", {})
     config_values = {
@@ -106,7 +111,8 @@ def export_checkpoint(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", help="Resumable checkpoint .pt")
-    parser.add_argument("destination", nargs="?", default=str(DEFAULT_EXPORT_PATH))
+    parser.add_argument("destination", nargs="?", default=None,
+                        help="Export path; default uses a separate directory for each structured architecture")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--stochastic", dest="deterministic_eval", action="store_false",
                       help="Export the stochastic inference mode used in sampled evaluation")

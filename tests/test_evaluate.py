@@ -100,6 +100,8 @@ def test_evaluator_requires_explicit_legacy_loading_and_keeps_dimensions(tmp_pat
 
 def test_terminal_metrics_use_final_engine_state_without_policy_leakage(monkeypatch):
     class ObservationOnlyPolicy:
+        architecture_id = STRUCTURED_ARCHITECTURE_ID
+
         def __call__(self, encoded):
             assert set(encoded) == {"rays", "entity_features", "entity_type", "entity_mask", "vitals"}
             # The policy must see its public health=100, never privileged terminal health=-8.

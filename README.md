@@ -85,6 +85,16 @@ flowchart TD
   * **Critic Head**: Outputs a scalar state-value estimate $V(s)$.
 * **Inference-Ready**: Includes `.step()` and `.init_hidden()` interfaces matching both the evaluation harness and training loops.
 
+The opt-in `doom_structured_ray_v2` variant appends each ray's fixed relative
+`sin(angle), cos(angle)` before the ray MLP and pooling. Ray 0 is ahead, 16 is
+left, 32 is behind, and 48 is right, matching the official sensor order. This
+allows the model to distinguish otherwise identical cues at different bearings.
+The default `doom_structured_v1` topology and its weights remain unchanged.
+Both variants are still feed-forward; recurrent memory is not implemented.
+The v2 variant has only been checked with synthetic inputs, gradients and
+checkpoint round trips. Combat improvement and unseen-layout performance have
+not been demonstrated.
+
 ### 3. Training & Optimization Pipeline (`training/`)
 * **Custom PPO & GAE (`training/ppo.py`)**:
   * Implements clipped surrogate policy objective, value function loss clipping, and entropy exploration bonus.
@@ -226,6 +236,11 @@ python -m training.validate_checkpoint training/runs/structured_v1/export
 
 Exports use versioned structured weights and a matching config in a separate experiment directory.
 Preserve existing baseline weights/config until paired gameplay evaluation justifies promotion.
+The training CLI accepts `--architecture doom_structured_ray_v2` explicitly;
+its default checkpoint/log directories and default export directory use
+`training/runs/structured_ray_v2/`, separate from v1. Existing v1 checkpoints
+cannot be resumed as v2: the ray input layer has nine rather than seven features,
+and cross-version loading is rejected. No automatic migration or promotion occurs.
 Select the same inference mode used in the candidate's evaluation explicitly, for example:
 
 ```bash

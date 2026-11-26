@@ -15,8 +15,10 @@ from torch import nn
 
 CHECKPOINT_VERSION = 1
 STRUCTURED_ARCHITECTURE_ID = "doom_structured_v1"
+DIRECTIONAL_ARCHITECTURE_ID = "doom_structured_ray_v2"
 LEGACY_ARCHITECTURE_ID = "doom_bernoulli_v1"
-SUPPORTED_ARCHITECTURES = frozenset({STRUCTURED_ARCHITECTURE_ID, LEGACY_ARCHITECTURE_ID})
+STRUCTURED_ARCHITECTURES = frozenset({STRUCTURED_ARCHITECTURE_ID, DIRECTIONAL_ARCHITECTURE_ID})
+SUPPORTED_ARCHITECTURES = STRUCTURED_ARCHITECTURES | {LEGACY_ARCHITECTURE_ID}
 
 
 class CheckpointCompatibilityError(ValueError):
@@ -37,6 +39,9 @@ def _architecture_from_weights(state: Mapping[str, torch.Tensor]) -> str | None:
     actor = state.get("actor.weight")
     if actor is None or actor.ndim != 2:
         return None
+    rays = state.get("ray_encoder.0.weight")
+    if actor.shape[0] == 12 and rays is not None and rays.ndim == 2 and rays.shape[1] == 9:
+        return DIRECTIONAL_ARCHITECTURE_ID
     return {
         9: LEGACY_ARCHITECTURE_ID,
         12: STRUCTURED_ARCHITECTURE_ID,
@@ -88,16 +93,20 @@ def validate_checkpoint_compatibility(checkpoint: Mapping[str, Any], model: nn.M
         return
     saved = checkpoint_architecture(checkpoint)
     if saved != expected:
+        guidance = (
+            "Legacy 9-logit Bernoulli weights cannot be loaded into the structured 12-logit policy; "
+            "use an explicit legacy policy for baseline evaluation or a separately trained structured checkpoint."
+            if LEGACY_ARCHITECTURE_ID in (saved, expected) else
+            "Ray-direction v2 and structured v1 checkpoints are not interchangeable; build the exact saved variant."
+        )
         raise CheckpointCompatibilityError(
             f"Incompatible checkpoint architecture: saved {saved or 'unidentified'!r}, "
-            f"requested {expected!r}. Legacy 9-logit Bernoulli weights cannot be loaded "
-            "into the structured 12-logit policy; use an explicit legacy policy for "
-            "baseline evaluation or a separately trained structured checkpoint."
+            f"requested {expected!r}. {guidance}"
         )
-    if expected == STRUCTURED_ARCHITECTURE_ID:
+    if expected in STRUCTURED_ARCHITECTURES:
         if _declared_architecture(checkpoint) is None or checkpoint.get("checkpoint_version") != CHECKPOINT_VERSION:
             raise CheckpointCompatibilityError(
-                "Structured checkpoints require architecture_id='doom_structured_v1' "
+                f"Structured checkpoints require architecture_id={expected!r} "
                 f"and checkpoint_version={CHECKPOINT_VERSION}; save/export a versioned checkpoint."
             )
     elif "checkpoint_version" in checkpoint and checkpoint["checkpoint_version"] != CHECKPOINT_VERSION:
