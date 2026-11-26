@@ -185,13 +185,26 @@ def test_reward_shaper_exploration_and_anti_exploit():
     _, comp_spin = shaper.step(p2, p_spin, action=np.zeros(9))
     assert comp_spin["anti_spin"] == pytest.approx(-0.5)
 
-    # Repeated USE spam (button 7)
+    # Repeated USE edges during the door opening interval, with a release in between.
     action_use = np.zeros(9, dtype=np.int8)
     action_use[7] = 1
-    shaper.step(p_spin, p_spin, action=action_use)  # 1st USE
-    shaper.step(p_spin, p_spin, action=action_use)  # 2nd USE
-    _, comp_spam = shaper.step(p_spin, p_spin, action=action_use)  # 3rd USE -> triggers penalty
+    action_release = np.zeros(9, dtype=np.int8)
+    shaper.step(p_spin, p_spin, action=action_use)  # first edge
+    shaper.step(p_spin, p_spin, action=action_release)
+    _, comp_spam = shaper.step(p_spin, p_spin, action=action_use)  # premature second edge
     assert comp_spam["anti_door_spam"] == pytest.approx(-0.5)
+
+
+def test_revisiting_cells_does_not_earn_movement_reward():
+    shaper = RewardShaper(RewardConfig(cell_size=64.0, living_penalty=0.0))
+    start = {"x": 0.0, "y": 0.0, "angle": 0.0}
+    shaper.reset(start)
+    first_new_cell = {"x": 70.0, "y": 0.0, "angle": 0.0}
+    _, first = shaper.step(start, first_new_cell, action=np.zeros(9))
+    _, revisit = shaper.step(first_new_cell, start, action=np.zeros(9))
+    assert first["exploration"] > 0
+    assert revisit["exploration"] == 0
+    assert revisit["movement"] == 0
 
 
 def test_observation_isolation():
@@ -232,6 +245,8 @@ def test_rollout_collector_shapes_and_boundaries():
     assert batch["log_probs"].shape == (num_steps,)
     assert batch["last_value"].shape == ()
     assert batch["truncations"].shape == (num_steps,)
+    assert batch["bootstrap_values"].shape == (num_steps,)
+    assert batch["bootstrap_values"].shape == (num_steps,)
 
     # Verify that truncations occurred and were logged
     assert batch["dones"].sum() > 0
@@ -302,4 +317,33 @@ def test_real_vizdoom_environment_rollout():
     assert "visible_entities" in obs and obs["visible_entities"]["features"].shape == (num_steps, 32, 5)
 
     env.close()
+
+
+def test_real_rollout_connects_spatial_policy_to_one_ppo_update(tmp_path):
+    """Exercise nested official observations through collection and a real optimizer step."""
+    from doom_env import make_env
+    from submission.model import DoomPolicy
+    from training.train import train_loop
+
+    env = make_env("maps/training/tier2_door.wad", "MAP01", render_buffers=False, episode_ticks=40)
+    try:
+        policy = DoomPolicy()
+        collector = RolloutCollector(env, device="cpu", seed=17)
+        result = train_loop(
+            policy,
+            collector,
+            config={
+                "total_updates": 1,
+                "rollout_steps": 4,
+                "minibatch_size": 4,
+                "update_epochs": 1,
+                "checkpoint_interval": 1,
+                "save_dir": str(tmp_path),
+                "device": "cpu",
+            },
+        )
+        assert result["total_steps"] == 4
+        assert (tmp_path / "checkpoint_1.pt").is_file()
+    finally:
+        env.close()
 

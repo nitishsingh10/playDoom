@@ -12,6 +12,7 @@ Coordinates:
 from __future__ import annotations
 
 import argparse
+import random
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -21,6 +22,15 @@ import torch.optim as optim
 
 from training.checkpoint import load_checkpoint, save_checkpoint
 from training.ppo import compute_gae, ppo_update
+
+
+def _flatten_time_batch(tree: Any) -> Any:
+    """Flatten a rollout's [T, B, ...] leaves while preserving nested dicts."""
+    if isinstance(tree, dict):
+        return {key: _flatten_time_batch(value) for key, value in tree.items()}
+    if torch.is_tensor(tree) and tree.ndim >= 2:
+        return tree.flatten(0, 1)
+    return tree
 
 
 def default_train_config() -> Dict[str, Any]:
@@ -77,6 +87,10 @@ def train_loop(
 
     device = torch.device(cfg["device"])
     model = model.to(device)
+    # Keep observations/actions and model outputs on one device throughout PPO.
+    # This also avoids CPU/GPU mismatches in Bernoulli log-probability updates.
+    if hasattr(collector, "device"):
+        collector.device = device
 
     if optimizer is None:
         optimizer = optim.Adam(model.parameters(), lr=cfg["lr"], eps=cfg["eps_adam"])
@@ -85,7 +99,7 @@ def train_loop(
     global_step = 0
 
     if resume_path and Path(resume_path).exists():
-        ckpt_info = load_checkpoint(resume_path, model, optimizer, device=device)
+        ckpt_info = load_checkpoint(resume_path, model, optimizer, device=device, restore_rng=True)
         start_update = ckpt_info.get("update", 0) + 1
         global_step = ckpt_info.get("global_step", 0)
         print(f"Resumed from {resume_path} at update {start_update}, global step {global_step}")
@@ -115,6 +129,11 @@ def train_loop(
             if "truncations" in rollout_data
             else None
         )
+        bootstrap_values = (
+            torch.as_tensor(rollout_data["bootstrap_values"], device=device, dtype=torch.float32)
+            if "bootstrap_values" in rollout_data
+            else None
+        )
 
         # 3. Compute GAE advantages and target returns
         with torch.no_grad():
@@ -126,16 +145,13 @@ def train_loop(
                 gamma=cfg["gamma"],
                 gae_lambda=cfg["gae_lambda"],
                 truncations=truncations,
+                bootstrap_values=bootstrap_values,
             )
 
         # Prepare batch for PPO update
         # Flatten rollout trajectory [T, B] into batch [N] if batched
         if rewards.dim() > 1:
-            batch_obs = (
-                {k: v.flatten(0, 1) for k, v in rollout_data["obs"].items()}
-                if isinstance(rollout_data["obs"], dict)
-                else rollout_data["obs"].flatten(0, 1)
-            )
+            batch_obs = _flatten_time_batch(rollout_data["obs"])
             batch_actions = torch.as_tensor(rollout_data["actions"], device=device).flatten(0, 1)
             batch_old_log_probs = torch.as_tensor(rollout_data["log_probs"], device=device).flatten(0, 1)
             batch_returns = returns.flatten(0, 1)
@@ -212,15 +228,67 @@ def train_loop(
     return {"total_steps": global_step, "total_updates": total_updates, "total_time": total_time}
 
 
-if __name__ == "__main__":
+def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="PPO training runner for DoomPolicy")
     parser.add_argument("--updates", type=int, default=50, help="Number of PPO updates")
     parser.add_argument("--rollout-steps", type=int, default=128, help="Steps per rollout")
+    parser.add_argument("--minibatch-size", type=int, default=64)
+    parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
-    parser.add_argument("--save-dir", type=str, default="checkpoints")
+    parser.add_argument("--wad", action="append", default=None, help="Training WAD; repeat to cycle among maps")
+    parser.add_argument("--map", type=str, default="MAP01")
+    parser.add_argument("--episode-ticks", type=int, default=2100)
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--save-dir", type=str, default="training/runs/checkpoints")
+    parser.add_argument("--log-dir", type=str, default="training/runs/logs")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    print("Member 2 Training Orchestrator loaded.")
-    print("Run `pytest tests/test_ppo.py` to verify unit tests.")
+    import numpy as np
+    from submission.model import DoomPolicy
+    from training.envs import MapCyclerEnv, default_training_maps
+    from training.metrics import MetricsLogger
+    from training.rewards import RewardShaper
+    from training.rollout import RolloutCollector
+
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    torch.set_num_threads(1)
+
+    maps = [(wad, args.map) for wad in args.wad] if args.wad else default_training_maps()
+    env = MapCyclerEnv(maps, episode_ticks=args.episode_ticks, seed=args.seed)
+    logger = MetricsLogger(log_dir=args.log_dir)
+    collector = RolloutCollector(
+        env,
+        shaper=RewardShaper(),
+        metrics_logger=logger,
+        device=args.device,
+        seed=args.seed,
+    )
+    config = default_train_config()
+    config.update({
+        "total_updates": args.updates,
+        "rollout_steps": args.rollout_steps,
+        "minibatch_size": args.minibatch_size,
+        "update_epochs": args.epochs,
+        "lr": args.lr,
+        "device": args.device,
+        "save_dir": args.save_dir,
+    })
+    try:
+        summary = train_loop(
+            DoomPolicy(), collector, config=config, resume_path=args.resume, metrics_logger=logger
+        )
+        logger.save_json("training_metrics.json")
+        print(f"Training summary: {summary}")
+        return 0
+    finally:
+        env.close()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

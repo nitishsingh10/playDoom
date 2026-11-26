@@ -97,3 +97,15 @@ def test_policy_convenience_methods_and_factory():
     built = build_policy()
     assert isinstance(built, DoomPolicy)
 
+
+def test_policy_accepts_raw_observation_and_matches_encoded_path():
+    observation = make_observation(4)
+    encoder = ObservationEncoder()
+    encoded = encoder(observation)
+    model = DoomPolicy().eval()
+    with torch.inference_mode():
+        raw_logits, raw_value, _ = model(observation)
+        encoded_logits, encoded_value, _ = model(encoded)
+    assert torch.allclose(raw_logits, encoded_logits)
+    assert torch.allclose(raw_value, encoded_value)
+

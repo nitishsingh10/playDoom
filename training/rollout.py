@@ -143,6 +143,10 @@ class RolloutBatch(dict):
     def truncations(self) -> Optional[torch.Tensor]:
         return self.get("truncations")
 
+    @property
+    def bootstrap_values(self) -> Optional[torch.Tensor]:
+        return self.get("bootstrap_values")
+
     def to_tuple(self) -> Tuple[Any, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Unpack the 6 canonical rollout fields according to shared Python interfaces."""
         return (
@@ -164,11 +168,14 @@ class RolloutCollector:
         shaper: Optional[RewardShaper] = None,
         metrics_logger: Optional[MetricsLogger] = None,
         device: Union[str, torch.device] = "cpu",
+        seed: Optional[int] = None,
     ):
         self.env = env
         self.shaper = shaper or RewardShaper()
         self.metrics_logger = metrics_logger
         self.device = torch.device(device)
+        self.seed = seed
+        self._has_reset = False
 
         self._current_obs: Optional[Dict[str, Any]] = None
         self._current_info: Optional[Dict[str, Any]] = None
@@ -181,7 +188,11 @@ class RolloutCollector:
     def _ensure_env_reset(self) -> None:
         """Ensure environment is active and observation is available."""
         if self._current_obs is None:
-            self._current_obs, self._current_info = self.env.reset()
+            if not self._has_reset and self.seed is not None:
+                self._current_obs, self._current_info = self.env.reset(seed=self.seed)
+            else:
+                self._current_obs, self._current_info = self.env.reset()
+            self._has_reset = True
             self._episode_id += 1
             self._episode_step_count = 0
             self._episode_raw_return = 0.0
@@ -261,8 +272,10 @@ class RolloutCollector:
         value_buffer: List[torch.Tensor] = []
         log_prob_buffer: List[torch.Tensor] = []
         truncation_buffer: List[bool] = []
+        bootstrap_value_buffer: List[float] = []
 
         last_transition_terminated = False
+        last_transition_truncated = False
 
         for _ in range(num_steps):
             obs = self._current_obs
@@ -271,10 +284,6 @@ class RolloutCollector:
             # Query policy
             action_tensor, val_tensor, log_prob_tensor = self._step_policy(policy, obs)
             action_np = action_tensor.cpu().numpy().astype(np.int8)
-
-            # Track door spam
-            if len(action_np) > 7 and action_np[7] == 1:
-                self._door_spam_count += 1
 
             # Read privileged state before step (for delta reward shaping)
             prev_priv = None
@@ -306,11 +315,21 @@ class RolloutCollector:
                     env_reward=env_reward,
                     info=info,
                 )
+                self._door_spam_count = self.shaper.door_spam_count
             else:
                 shaped_reward = float(env_reward)
 
             is_done = terminated or truncated
             last_transition_terminated = bool(terminated)
+            last_transition_truncated = bool(truncated)
+
+            # Capture the final timeout-state value before resetting. Using the
+            # next rollout state's value here would leak across episodes.
+            if truncated:
+                _, truncation_value, _ = self._step_policy(policy, next_obs)
+                bootstrap_value_buffer.append(float(truncation_value.item()))
+            else:
+                bootstrap_value_buffer.append(0.0)
 
             action_buffer.append(action_tensor)
             reward_buffer.append(float(shaped_reward))
@@ -329,6 +348,7 @@ class RolloutCollector:
                     kills = 0
                     damage_taken = 0.0
                     keys_held = 0
+                    ammo_remaining = float(np.asarray(next_obs["vitals"])[4:8].sum())
                     max_ticks = 2100
 
                     if curr_priv is not None:
@@ -349,7 +369,7 @@ class RolloutCollector:
                         max_ticks=max_ticks,
                         unique_cells=int(summary.get("unique_cells_visited", 0)),
                         door_spam_count=self._door_spam_count,
-                        ammo_remaining=100.0,
+                        ammo_remaining=ammo_remaining,
                         damage_taken=damage_taken,
                     )
 
@@ -367,6 +387,7 @@ class RolloutCollector:
                         kills=kills,
                         damage_taken=damage_taken,
                         keys_held=keys_held,
+                        ammo_remaining=ammo_remaining,
                         unique_cells=int(summary.get("unique_cells_visited", 0)),
                         failure_mode=failure,
                         reward_components=summary,
@@ -396,7 +417,7 @@ class RolloutCollector:
         # Compute bootstrap value for GAE:
         # If last step was true terminal, bootstrap value is 0.0.
         # Otherwise, bootstrap value is policy value estimate on self._current_obs.
-        if last_transition_terminated:
+        if last_transition_terminated or last_transition_truncated:
             last_value = torch.tensor(0.0, device=self.device, dtype=torch.float32)
         else:
             _, last_value, _ = self._step_policy(policy, self._current_obs)
@@ -420,6 +441,7 @@ class RolloutCollector:
                 "log_probs": log_probs,
                 "last_value": last_value,
                 "truncations": truncations,
+                "bootstrap_values": torch.tensor(bootstrap_value_buffer, dtype=torch.float32, device=self.device),
             }
         )
 

@@ -6,6 +6,7 @@ import torch
 from torch import nn
 
 from doom_env import spaces as doom_spaces
+from submission.observation import ObservationEncoder
 
 
 class DoomPolicy(nn.Module):
@@ -18,6 +19,7 @@ class DoomPolicy(nn.Module):
     def __init__(self, hidden_size: int = 32, fusion_size: int = 128):
         super().__init__()
         self.hidden_size = hidden_size
+        self.observation_encoder = ObservationEncoder()
         self.ray_encoder = nn.Sequential(
             nn.Linear(1 + len(doom_spaces.RAY_HIT_TYPES), hidden_size),
             nn.ReLU(),
@@ -64,6 +66,14 @@ class DoomPolicy(nn.Module):
 
     def forward(self, encoded_obs: dict[str, torch.Tensor], hidden_state=None):
         """Return ``(logits[B,9], value[B], next_hidden=None)``."""
+        # Training rollouts hold the official nested observation dictionary;
+        # inference may pass the already encoded tensors from submission.schema.
+        # Accept both forms so the same preprocessing is used end to end.
+        if isinstance(encoded_obs.get("rays"), dict):
+            encoded_obs = self.observation_encoder(encoded_obs)
+        model_device = next(self.parameters()).device
+        encoded_obs = {key: value.to(model_device) for key, value in encoded_obs.items()}
+
         rays = encoded_obs["rays"]
         entity_features = encoded_obs["entity_features"]
         entity_type = encoded_obs["entity_type"]

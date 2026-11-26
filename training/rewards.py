@@ -41,17 +41,17 @@ class RewardConfig:
 
     # Exploration & Movement
     cell_size: float = 64.0  # Map units per spatial grid cell
-    exploration_reward: float = 0.2  # Awarded once per unique cell visited per episode
+    exploration_reward: float = 0.5  # Awarded once per unique cell visited per episode
     movement_reward_coef: float = 0.001  # Small reward for translation
     max_movement_reward_per_step: float = 0.05
     min_movement_threshold: float = 2.0  # Units of movement required to avoid stall penalty
-    living_penalty: float = 0.005  # Step cost to discourage idling
+    living_penalty: float = 0.001  # Small step cost without drowning sparse progress rewards
 
     # Anti-Exploit Penalties
     anti_spin_penalty: float = 0.02  # Penalty for turning without translating
     spin_angle_threshold_deg: float = 15.0  # Degrees turn to check for spin
-    anti_door_spam_penalty: float = 0.05  # Penalty for spamming USE button
-    max_consecutive_use: int = 2  # Max consecutive USE steps before penalty triggers
+    anti_door_spam_penalty: float = 0.02  # Penalty for premature repeated USE edges
+    use_cooldown_steps: int = 8  # Do not press USE again while a door should still be opening
 
     # Scale factor for raw environment reward
     env_reward_scale: float = 1.0
@@ -64,7 +64,10 @@ class RewardShaper:
         self.config = config or RewardConfig()
         self.visited_cells: Set[Tuple[int, int]] = set()
         self.prev_privileged: Optional[Dict[str, Any]] = None
-        self.consecutive_use_count: int = 0
+        self.step_count: int = 0
+        self.previous_use_pressed: bool = False
+        self.last_use_step: Optional[int] = None
+        self.door_spam_count: int = 0
         self.total_components: Dict[str, float] = self._zero_components()
 
     def _zero_components(self) -> Dict[str, float]:
@@ -86,7 +89,10 @@ class RewardShaper:
     def reset(self, initial_privileged: Optional[Dict[str, Any]] = None) -> None:
         """Reset internal trackers at the beginning of an episode."""
         self.visited_cells.clear()
-        self.consecutive_use_count = 0
+        self.step_count = 0
+        self.previous_use_pressed = False
+        self.last_use_step = None
+        self.door_spam_count = 0
         self.total_components = self._zero_components()
         self.prev_privileged = initial_privileged
 
@@ -169,14 +175,14 @@ class RewardShaper:
         dy = curr_y - prev_y
         dist_moved = math.hypot(dx, dy)
 
-        # Unique grid cell exploration
+        # Reward progress only on entry into a new cell. Repeated movement in
+        # already visited cells cannot be farmed by circling or backtracking.
         cell = (int(curr_x // cfg.cell_size), int(curr_y // cfg.cell_size))
-        if cell not in self.visited_cells:
+        new_cell = cell not in self.visited_cells
+        if new_cell:
             self.visited_cells.add(cell)
             components["exploration"] += cfg.exploration_reward
-
-        # Movement reward (capped to prevent velocity exploits)
-        if dist_moved >= cfg.min_movement_threshold:
+        if new_cell and dist_moved >= cfg.min_movement_threshold:
             step_movement = min(dist_moved * cfg.movement_reward_coef, cfg.max_movement_reward_per_step)
             components["movement"] += step_movement
 
@@ -191,7 +197,9 @@ class RewardShaper:
         if d_ang > cfg.spin_angle_threshold_deg and dist_moved < cfg.min_movement_threshold:
             components["anti_spin"] -= cfg.anti_spin_penalty
 
-        # 10. Anti-Door-Spam Check (action[7] is USE)
+        # Count USE button-down edges rather than held frames. Doom triggers USE
+        # on the edge, and another press during the opening interval can reverse
+        # the door and cause the familiar door-bounce loop.
         use_pressed = False
         try:
             if hasattr(action, "__getitem__") and len(action) > 7:
@@ -199,12 +207,17 @@ class RewardShaper:
         except (IndexError, TypeError):
             use_pressed = False
 
-        if use_pressed:
-            self.consecutive_use_count += 1
-            if self.consecutive_use_count > cfg.max_consecutive_use:
+        use_edge = use_pressed and not self.previous_use_pressed
+        if use_edge:
+            if (
+                self.last_use_step is not None
+                and self.step_count - self.last_use_step <= cfg.use_cooldown_steps
+                and dist_moved < cfg.min_movement_threshold
+            ):
                 components["anti_door_spam"] -= cfg.anti_door_spam_penalty
-        else:
-            self.consecutive_use_count = 0
+                self.door_spam_count += 1
+            self.last_use_step = self.step_count
+        self.previous_use_pressed = use_pressed
 
         # Sum total shaped reward
         shaped_reward = sum(components.values())
@@ -215,6 +228,7 @@ class RewardShaper:
 
         # Update previous state
         self.prev_privileged = curr_privileged
+        self.step_count += 1
 
         return float(shaped_reward), components
 

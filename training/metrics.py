@@ -83,6 +83,7 @@ class EpisodeRecord:
     kills: int
     damage_taken: float
     keys_held: int
+    ammo_remaining: float
     unique_cells: int
     failure_mode: str
     reward_components: Dict[str, float] = field(default_factory=dict)
@@ -126,8 +127,10 @@ class MetricsLogger:
                 "mean_raw_return": 0.0,
                 "mean_shaped_return": 0.0,
                 "mean_kills": 0.0,
+                "mean_damage_taken": 0.0,
                 "mean_unique_cells": 0.0,
                 "mean_ticks": 0.0,
+                "mean_ammo_remaining": 0.0,
                 "failure_modes": {},
             }
 
@@ -148,6 +151,7 @@ class MetricsLogger:
             "mean_unique_cells": statistics.mean(r.unique_cells for r in records),
             "mean_ticks": statistics.mean(r.ticks for r in records),
             "mean_damage_taken": statistics.mean(r.damage_taken for r in records),
+            "mean_ammo_remaining": statistics.mean(r.ammo_remaining for r in records),
             "failure_modes": {k: v / n for k, v in failure_counts.items()},
         }
         return summary
@@ -165,6 +169,7 @@ class MetricsLogger:
             f"  Mean Unique Cells:   {s['mean_unique_cells']:.1f}",
             f"  Mean Ticks/Episode:  {s['mean_ticks']:.1f}",
             f"  Mean Damage Taken:   {s['mean_damage_taken']:.1f}",
+            f"  Mean Ammo Remaining: {s['mean_ammo_remaining']:.1f}",
             "  Failure Modes:",
         ]
         for mode, frac in s["failure_modes"].items():
@@ -181,6 +186,7 @@ class MetricsLogger:
             "summary": self.get_summary(recent_only=False),
             "recent_summary": self.get_summary(recent_only=True),
             "episodes": [asdict(r) for r in self.episodes[-200:]],  # store last 200
+            "training_steps": self.training_steps_log[-2000:],
         }
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
