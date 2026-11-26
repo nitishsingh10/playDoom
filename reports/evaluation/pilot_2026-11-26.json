@@ -1,0 +1,65 @@
+{
+  "status": "pilot_only_not_a_submission_candidate",
+  "training": {
+    "updates": 320,
+    "rollout_decisions": 20480,
+    "device": "cpu",
+    "resumed_from_updates": 64,
+    "additional_updates": 256,
+    "training_maps": [
+      "maps/training/tier1_projectile.wad:MAP01",
+      "maps/training/tier2_door.wad:MAP01",
+      "maps/training/tier3_red_key.wad:MAP01"
+    ],
+    "episode_tick_cap": 400
+  },
+  "held_out_proxy_evaluation": {
+    "map": "maps/two_rooms.wad:MAP01",
+    "role": "local wiring/held-out proxy; not an official hidden map",
+    "action_threshold": 0.5,
+    "seeds": [0, 1, 2, 3, 4],
+    "episodes": 5,
+    "exit_rate": 0.0,
+    "survival_rate": 1.0,
+    "mean_kills": 0.0,
+    "mean_damage_taken": 0.0,
+    "mean_keycards": 0.0,
+    "mean_ammo_remaining": 0.0,
+    "mean_unique_64_unit_cells": 6.0,
+    "doors_opened": null,
+    "per_seed": [
+      {"seed": 0, "exit_reached": false, "ticks": 2101, "unique_cells": 6},
+      {"seed": 1, "exit_reached": false, "ticks": 2101, "unique_cells": 6},
+      {"seed": 2, "exit_reached": false, "ticks": 2101, "unique_cells": 6},
+      {"seed": 3, "exit_reached": false, "ticks": 2101, "unique_cells": 6},
+      {"seed": 4, "exit_reached": false, "ticks": 2101, "unique_cells": 6}
+    ]
+  },
+  "synthetic_training_map_evaluation": {
+    "episodes": 15,
+    "exit_rate": 0.0,
+    "survival_rate": 0.7333333333,
+    "mean_kills": 0.0666666667,
+    "mean_damage_taken": 32.4,
+    "mean_keycards": 0.3333333333,
+    "mean_unique_64_unit_cells": 4.8,
+    "seeds": [0, 1, 2, 3, 4],
+    "episode_tick_cap": 2100
+  },
+  "action_threshold_sweep": {
+    "map": "maps/two_rooms.wad:MAP01",
+    "seeds": [0, 1, 2, 3, 4],
+    "thresholds": [0.25, 0.35, 0.5, 0.65, 0.8, 0.95],
+    "exit_rate_at_all_thresholds": 0.0,
+    "note": "Changing the deterministic action threshold did not restore exit progress."
+  },
+  "unavailable_metrics": {
+    "doors_opened": "The official wrapper does not expose an opened-door counter."
+  },
+  "notes": [
+    "The extended policy explored but failed to reach any exit on either the held-out proxy or synthetic maps.",
+    "The held-out map policy also exhausted its 50 rounds of ammunition at the default 0.5 action threshold without killing anything.",
+    "This checkpoint is not suitable for submission; do not export it to submission/weights/.",
+    "The official wrapper does not expose an opened-door counter."
+  ]
+}

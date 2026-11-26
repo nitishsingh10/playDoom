@@ -14,6 +14,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -147,6 +148,23 @@ def test_gae_terminal_handling():
     expected_delta_0 = 1.0 + gamma * 0.5 - 0.5
     expected_adv_0 = expected_delta_0 + gamma * gae_lambda * expected_adv_1
     assert torch.isclose(advantages[0], torch.tensor(expected_adv_0), atol=1e-5)
+
+
+def test_gae_truncation_bootstraps_terminal_observation_and_cuts_episode():
+    rewards = torch.tensor([1.0, 5.0, 1.0])
+    values = torch.tensor([0.5, 10.0, 0.25])
+    dones = torch.tensor([1.0, 0.0, 0.0])
+    truncations = torch.tensor([True, False, False])
+    bootstrap_values = torch.tensor([2.0, 0.0, 0.0])
+
+    advantages, _ = compute_gae(
+        rewards, values, dones, torch.tensor(0.0), gamma=0.99, gae_lambda=0.95,
+        truncations=truncations, bootstrap_values=bootstrap_values,
+    )
+
+    assert advantages[0].item() == pytest.approx(1.0 + 0.99 * 2.0 - 0.5)
+    # The large value in the reset episode must not leak across the boundary.
+    assert advantages[0].item() != pytest.approx(1.0 + 0.99 * 10.0 - 0.5)
 
 
 def test_ppo_synthetic_batch_update_and_parameter_changes():

@@ -55,11 +55,9 @@ class DoomAgent:
             # Fallback baseline before trained weights are promoted to submission/weights/.
             self.model = None
             return
-        # Trained PyTorch checkpoint loading will be wired here once Member 3 publishes
-        # the shared model definition and Member 2 produces a trained checkpoint.
         import torch  # noqa: PLC0415
 
-        from training.model import build_policy  # noqa: PLC0415
+        from submission.model import build_policy  # noqa: PLC0415
 
         model = build_policy(self.config)
         state = torch.load(weights_path, map_location=self.device, weights_only=True)

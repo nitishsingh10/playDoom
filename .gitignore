@@ -228,4 +228,6 @@ PROGRESS.md
 MEMBER_*_PROGRESS.md
 MEMBER_2_PROGRESS.md
 *.pdf
+training/runs/
+checkpoints/
 

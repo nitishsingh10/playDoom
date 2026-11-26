@@ -69,16 +69,16 @@ def compute_gae(
     gamma: float = 0.99,
     gae_lambda: float = 0.95,
     truncations: Optional[torch.Tensor] = None,
+    bootstrap_values: Optional[torch.Tensor] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """Compute Generalized Advantage Estimation (GAE) and returns.
 
     Terminal handling rules:
     - If a step is a true terminal (player death, goal reached, terminated=True):
       The episode truly ended; future value does NOT bootstrap: next_non_terminal = 0.
-    - If a step is truncated (time limit cap reached, truncated=True):
-      The episode stopped due to horizon, but the underlying state is not terminal.
-      If truncations mask is provided, we can bootstrap value at truncation while
-      cutting the trajectory horizon, or handle standard dones.
+    - If a step is truncated (time limit cap reached, truncated=True), bootstrap
+      from `bootstrap_values[t]`, evaluated on that episode's final observation,
+      then cut GAE propagation at the reset boundary.
     - When dones is [T, B] boolean or float where 1.0 indicates episode end (terminated):
       next_non_terminal = 1.0 - dones[t].
 
@@ -90,6 +90,8 @@ def compute_gae(
         gamma: Discount factor (e.g., 0.99).
         gae_lambda: GAE smoothing parameter (e.g., 0.95).
         truncations: Optional [T, B] tensor indicating time-limit truncation.
+        bootstrap_values: Optional [T, B] values for the final observation at each
+            truncation. These must be captured before resetting the environment.
 
     Returns:
         advantages: [T, B] or [T] tensor of GAE advantages A_t.
@@ -99,8 +101,6 @@ def compute_gae(
     advantages = torch.zeros_like(rewards)
     last_gae = torch.zeros_like(last_value)
 
-    # If truncations are provided, a done that is truncated still has a continuation value
-    # for bootstrapping the TD error, but last_gae does not propagate across episode boundary.
     for t in reversed(range(T)):
         if t == T - 1:
             next_non_terminal = 1.0 - dones[t].float()
@@ -109,15 +109,20 @@ def compute_gae(
             next_non_terminal = 1.0 - dones[t].float()
             next_value = values[t + 1]
 
-        # TD residual: delta_t = r_t + gamma * V(s_{t+1}) * (1 - done_t) - V(s_t)
-        # Note: if truncated at step t, V(s_{t+1}) is valid bootstrap for r_t, but GAE resets
-        if truncations is not None and truncations[t]:
-            # Truncation: bootstrap value from next_value, but don't propagate GAE backwards
-            delta = rewards[t] + gamma * next_value - values[t]
-            last_gae = delta
+        delta = rewards[t] + gamma * next_value * next_non_terminal - values[t]
+        current_gae = delta + gamma * gae_lambda * next_non_terminal * last_gae
+        if truncations is not None:
+            is_truncated = truncations[t].bool()
+            if bootstrap_values is None:
+                # Backward-compatible fallback; callers should pass final-state
+                # values to avoid bootstrapping from a reset episode.
+                truncation_next_value = next_value
+            else:
+                truncation_next_value = bootstrap_values[t]
+            truncation_delta = rewards[t] + gamma * truncation_next_value - values[t]
+            last_gae = torch.where(is_truncated, truncation_delta, current_gae)
         else:
-            delta = rewards[t] + gamma * next_value * next_non_terminal - values[t]
-            last_gae = delta + gamma * gae_lambda * next_non_terminal * last_gae
+            last_gae = current_gae
 
         advantages[t] = last_gae
 

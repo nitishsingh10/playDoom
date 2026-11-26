@@ -106,3 +106,26 @@ def test_imports_missing_from_image_warn(tmp_path):
     (repo / "submission" / "requirements.txt").write_text("pytest==9.2.0\n")
     out = run(repo)
     assert "Imports" not in out.stdout, out.stdout
+
+
+def test_agent_loads_tensor_checkpoint_without_training_import(tmp_path, monkeypatch):
+    import sys
+
+    import torch
+
+    import submission.agent as agent_module
+    from doom_env import spaces as doom_spaces
+    from submission.model import DoomPolicy
+
+    weights_dir = tmp_path / "weights"
+    weights_dir.mkdir()
+    torch.save(DoomPolicy().state_dict(), weights_dir / "checkpoint.pt")
+    monkeypatch.setattr(agent_module, "WEIGHTS_DIR", weights_dir)
+    monkeypatch.setitem(sys.modules, "training.model", None)
+
+    agent = agent_module.DoomAgent(doom_spaces.observation_space(), doom_spaces.action_space(), "cpu")
+    action = agent.act(doom_spaces.observation_space().sample())
+
+    assert agent.model is not None
+    assert action.shape == (9,)
+    assert set(action.tolist()) <= {0, 1}
