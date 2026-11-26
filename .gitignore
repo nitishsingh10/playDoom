@@ -222,8 +222,9 @@ _vizdoom.ini
 
 # Local validator / scorer artifacts
 *.lmp
-
 # Local progress tracking & documents
+PROGRESS.md
+*PROGRESS.md
 MEMBER_*_PROGRESS.md
 MEMBER_2_PROGRESS.md
 *.pdf
