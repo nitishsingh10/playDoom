@@ -30,20 +30,11 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.distributions.bernoulli import Bernoulli
 
 from training.metrics import EpisodeRecord, FailureMode, MetricsLogger
 from training.rewards import RewardConfig, RewardShaper
 
-try:
-    from training.ppo import sample_actions
-except ImportError:
-    # Standalone fallback if training.ppo is not available
-    def sample_actions(logits: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        dist = Bernoulli(logits=logits)
-        actions = dist.sample()
-        log_probs = dist.log_prob(actions).sum(dim=-1)
-        return actions, log_probs
+from training.ppo import sample_actions
 
 
 def collate_observations(obs_list: List[Dict[str, Any]], device: torch.device) -> Dict[str, Any]:
@@ -231,7 +222,7 @@ class RolloutCollector:
             else:
                 raise TypeError(f"Unsupported policy object {type(policy)}")
 
-            # Unpack policy outputs: Member 3 returns (logits [batch, 9], value [batch], next_hidden)
+            # Internal structured logits have 12 entries; stored/executed actions have 9.
             if isinstance(out, tuple):
                 logits = out[0]
                 values = out[1]

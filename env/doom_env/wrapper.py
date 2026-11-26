@@ -213,6 +213,10 @@ class DoomEnv(gym.Env):
             "z": float(v[_V[GV.POSITION_Z]]),
             "angle": float(v[_V[GV.ANGLE]]),
             "health": float(v[_V[GV.HEALTH]]),
+            # Diagnostic metrics must include the final tics even when the
+            # terminal observation is the previous available engine state.
+            "selected_weapon": float(v[_V[GV.SELECTED_WEAPON]]),
+            "selected_weapon_ammo": float(v[_V[GV.SELECTED_WEAPON_AMMO]]),
             "kills": int(v[_V[GV.KILLCOUNT]]),
             "items": int(v[_V[GV.ITEMCOUNT]]),
             "damage_taken": float(v[_V[GV.DAMAGE_TAKEN]]),

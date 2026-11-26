@@ -186,9 +186,18 @@ HOSTILE = {
 def test_hostile_replies_become_protocol_failures(name):
     import resource
     import socket
+    import threading
     host, agent = socket.socketpair()
     conn = remote.AgentConnection(host)
-    agent.sendall(_raw(HOSTILE[name]))  # pre-sent before the request even arrives
+    # macOS socket buffers may be smaller than the hostile JSON payload. Send
+    # concurrently so sendall cannot block the test before the receiver starts.
+    def send_reply():
+        try:
+            agent.sendall(_raw(HOSTILE[name]))
+        except OSError:
+            pass  # The receiver may reject the header before all bytes arrive.
+    sender = threading.Thread(target=send_reply, daemon=True)
+    sender.start()
     before = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     with pytest.raises(remote.AgentFailure) as ei:
         conn.act({"x": np.zeros(3, np.int8)}, timeout=1.0)
@@ -196,6 +205,7 @@ def test_hostile_replies_become_protocol_failures(name):
     assert resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before < 200_000  # < ~200 MB growth
     host.close()
     agent.close()
+    sender.join(timeout=1)
 
 
 def test_presented_valid_reply_is_rejected():

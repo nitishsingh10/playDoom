@@ -16,6 +16,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from submission.checkpoint import CHECKPOINT_VERSION, load_policy_state
+
 
 def save_checkpoint(
     path: Union[str, Path],
@@ -50,15 +52,34 @@ def save_checkpoint(
     if torch.cuda.is_available():
         rng_state["torch_cuda"] = torch.cuda.get_rng_state_all()
 
+    saved_config = dict(config or {})
+    model_config: Dict[str, Any] = {}
+    architecture_id = getattr(model, "architecture_id", None)
+    if architecture_id is not None:
+        model_config["architecture_id"] = architecture_id
+        for field in ("hidden_size", "fusion_size"):
+            if hasattr(model, field):
+                model_config[field] = getattr(model, field)
+        for field, value in model_config.items():
+            if field in saved_config and saved_config[field] != value:
+                raise ValueError(
+                    f"Checkpoint config {field}={saved_config[field]!r} does not match model {value!r}."
+                )
+            saved_config[field] = value
+
     checkpoint_data: Dict[str, Any] = {
+        "checkpoint_version": CHECKPOINT_VERSION,
         "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict() if optimizer is not None else None,
         "update": update,
         "global_step": global_step,
-        "config": config or {},
+        "config": saved_config,
         "rng_state": rng_state,
         "extra": extra or {},
     }
+    if architecture_id is not None:
+        checkpoint_data["architecture_id"] = architecture_id
+        checkpoint_data["model_config"] = model_config
 
     # Save to atomic temp file first to prevent corruption if interrupted
     tmp_path = save_path.with_suffix(f"{save_path.suffix}.tmp")
@@ -96,12 +117,8 @@ def load_checkpoint(
         # Compatibility with older PyTorch versions where weights_only argument doesn't exist
         checkpoint = torch.load(load_path, map_location=device)
 
-    # Load model weights
-    if "model_state_dict" in checkpoint:
-        model.load_state_dict(checkpoint["model_state_dict"])
-    else:
-        # Fallback if raw state_dict was saved directly
-        model.load_state_dict(checkpoint)
+    # Validate architecture before loading any weights or optimizer state.
+    load_policy_state(model, checkpoint)
 
     # Load optimizer state if provided and available
     if optimizer is not None and checkpoint.get("optimizer_state_dict") is not None:
@@ -111,15 +128,19 @@ def load_checkpoint(
     if restore_rng and "rng_state" in checkpoint:
         rng = checkpoint["rng_state"]
         if "torch_cpu" in rng and rng["torch_cpu"] is not None:
-            torch.set_rng_state(rng["torch_cpu"])
+            # map_location may place even the CPU RNG bytes on the training GPU.
+            torch.set_rng_state(rng["torch_cpu"].cpu())
         if "numpy" in rng and rng["numpy"] is not None:
             np.random.set_state(rng["numpy"])
         if torch.cuda.is_available() and "torch_cuda" in rng and rng["torch_cuda"] is not None:
-            torch.cuda.set_rng_state_all(rng["torch_cuda"])
+            torch.cuda.set_rng_state_all([state.cpu() for state in rng["torch_cuda"]])
 
     return {
         "update": checkpoint.get("update", 0),
         "global_step": checkpoint.get("global_step", 0),
         "config": checkpoint.get("config", {}),
         "extra": checkpoint.get("extra", {}),
+        "architecture_id": checkpoint.get("architecture_id"),
+        "checkpoint_version": checkpoint.get("checkpoint_version"),
+        "model_config": checkpoint.get("model_config", {}),
     }

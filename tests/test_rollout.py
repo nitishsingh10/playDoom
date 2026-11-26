@@ -33,7 +33,7 @@ from training.rollout import RolloutBatch, RolloutCollector, collate_observation
 class MockDoomPolicy(nn.Module):
     """Mock policy matching Member 3's DoomPolicy interface for testing."""
 
-    def __init__(self, num_actions: int = 9):
+    def __init__(self, num_actions: int = 12):
         super().__init__()
         self.num_actions = num_actions
         self.linear = nn.Linear(17, 32)
@@ -310,6 +310,16 @@ def test_real_vizdoom_environment_rollout():
     assert torch.isfinite(batch["rewards"]).all()
     assert torch.isfinite(batch["values"]).all()
 
+    # Replay stored external buttons against unchanged logits after collation.
+    from training.ppo import evaluate_actions
+
+    with torch.no_grad():
+        logits, _, _ = policy(batch["obs"])
+        replay_log_probs, entropy = evaluate_actions(logits, batch["actions"])
+    torch.testing.assert_close(replay_log_probs, batch["log_probs"])
+    assert torch.isfinite(entropy).all()
+    assert (batch["actions"][:, :6].reshape(-1, 3, 2).sum(-1) <= 1).all()
+
     # Observation isolation on real environment
     obs = batch["obs"]
     assert "vitals" in obs and obs["vitals"].shape == (num_steps, 17)
@@ -346,4 +356,3 @@ def test_real_rollout_connects_spatial_policy_to_one_ppo_update(tmp_path):
         assert (tmp_path / "checkpoint_1.pt").is_file()
     finally:
         env.close()
-

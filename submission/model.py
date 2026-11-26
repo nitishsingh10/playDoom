@@ -2,23 +2,35 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import torch
 from torch import nn
 
 from doom_env import spaces as doom_spaces
+from submission.actions import NUM_ACTION_LOGITS
+from submission.checkpoint import LEGACY_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURE_ID
 from submission.observation import ObservationEncoder
 
 
 class DoomPolicy(nn.Module):
-    """Feed-forward spatial policy with 9 Bernoulli logits and a value head.
+    """Feed-forward spatial policy with 12 structured logits and a value head.
 
     ``hidden_state`` is reserved for a future recurrent variant. This first
     milestone is stateless and returns ``None`` as ``next_hidden``.
     """
 
-    def __init__(self, hidden_size: int = 32, fusion_size: int = 128):
+    def __init__(
+        self, hidden_size: int = 32, fusion_size: int = 128,
+        architecture_id: str = STRUCTURED_ARCHITECTURE_ID,
+    ):
         super().__init__()
+        if architecture_id not in (STRUCTURED_ARCHITECTURE_ID, LEGACY_ARCHITECTURE_ID):
+            raise ValueError(f"Unknown policy architecture: {architecture_id!r}")
+        # The legacy architecture is available only for explicit baseline comparisons.
+        self.architecture_id = architecture_id
         self.hidden_size = hidden_size
+        self.fusion_size = fusion_size
         self.observation_encoder = ObservationEncoder()
         self.ray_encoder = nn.Sequential(
             nn.Linear(1 + len(doom_spaces.RAY_HIT_TYPES), hidden_size),
@@ -47,7 +59,8 @@ class DoomPolicy(nn.Module):
             nn.Linear(fusion_size, hidden_size * 2),
             nn.ReLU(),
         )
-        self.actor = nn.Linear(hidden_size * 2, len(doom_spaces.BUTTONS))
+        output_size = NUM_ACTION_LOGITS if architecture_id == STRUCTURED_ARCHITECTURE_ID else len(doom_spaces.BUTTONS)
+        self.actor = nn.Linear(hidden_size * 2, output_size)
         self.critic = nn.Linear(hidden_size * 2, 1)
 
     @staticmethod
@@ -65,7 +78,7 @@ class DoomPolicy(nn.Module):
         return torch.cat((mean, maximum), dim=-1)
 
     def forward(self, encoded_obs: dict[str, torch.Tensor], hidden_state=None):
-        """Return ``(logits[B,9], value[B], next_hidden=None)``."""
+        """Return ``(logits[B,12], value[B], next_hidden=None)`` for structured PPO."""
         # Training rollouts hold the official nested observation dictionary;
         # inference may pass the already encoded tensors from submission.schema.
         # Accept both forms so the same preprocessing is used end to end.
@@ -104,7 +117,11 @@ class DoomPolicy(nn.Module):
 
 def build_policy(config=None, **kwargs) -> DoomPolicy:
     """Factory helper to instantiate DoomPolicy."""
-    hidden_size = getattr(config, "hidden_size", 32) if config is not None else kwargs.get("hidden_size", 32)
-    fusion_size = getattr(config, "fusion_size", 128) if config is not None else kwargs.get("fusion_size", 128)
-    return DoomPolicy(hidden_size=hidden_size, fusion_size=fusion_size)
-
+    defaults = {"hidden_size": 32, "fusion_size": 128, "architecture_id": STRUCTURED_ARCHITECTURE_ID}
+    if isinstance(config, Mapping):
+        values = {key: config.get(key, default) for key, default in defaults.items()}
+    elif config is not None:
+        values = {key: getattr(config, key, default) for key, default in defaults.items()}
+    else:
+        values = {key: kwargs.get(key, default) for key, default in defaults.items()}
+    return DoomPolicy(**values)

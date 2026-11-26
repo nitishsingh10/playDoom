@@ -56,7 +56,7 @@ def default_train_config() -> Dict[str, Any]:
         "checkpoint_interval": 25,
         "eval_interval": 50,
         "device": "cuda" if torch.cuda.is_available() else "cpu",
-        "save_dir": "checkpoints",
+        "save_dir": "training/runs/structured_v1/checkpoints",
     }
 
 
@@ -88,7 +88,7 @@ def train_loop(
     device = torch.device(cfg["device"])
     model = model.to(device)
     # Keep observations/actions and model outputs on one device throughout PPO.
-    # This also avoids CPU/GPU mismatches in Bernoulli log-probability updates.
+    # This also avoids CPU/GPU mismatches in structured log-probability updates.
     if hasattr(collector, "device"):
         collector.device = device
 
@@ -240,8 +240,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--map", type=str, default="MAP01")
     parser.add_argument("--episode-ticks", type=int, default=2100)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--save-dir", type=str, default="training/runs/checkpoints")
-    parser.add_argument("--log-dir", type=str, default="training/runs/logs")
+    parser.add_argument("--save-dir", type=str, default="training/runs/structured_v1/checkpoints")
+    parser.add_argument("--log-dir", type=str, default="training/runs/structured_v1/logs")
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume")
     args = parser.parse_args(argv)
 

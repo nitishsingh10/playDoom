@@ -2,7 +2,7 @@
 
 Verifies:
   1. GAE terminal boundary handling: true terminal transitions do not bootstrap next value.
-  2. Action sampling & log-prob shapes: 9 independent Bernoulli action dimensions.
+  2. Structured sampling & log-prob shapes: twelve logits yield nine valid buttons.
   3. PPO loss finiteness and optimizer parameter update.
   4. Deterministic checkpoint save and restore consistency.
   5. Mini training loop integration smoke test.
@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+from submission.actions import NUM_ACTION_LOGITS
 from training.checkpoint import load_checkpoint, save_checkpoint
 from training.ppo import compute_gae, evaluate_actions, ppo_update, sample_actions
 from training.train import default_train_config, train_loop
@@ -27,7 +28,7 @@ from training.train import default_train_config, train_loop
 class DummyDoomPolicy(nn.Module):
     """Minimal policy/value network matching Member 3's DoomPolicy interface for testing."""
 
-    def __init__(self, input_dim: int = 16, num_actions: int = 9):
+    def __init__(self, input_dim: int = 16, num_actions: int = NUM_ACTION_LOGITS):
         super().__init__()
         self.encoder = nn.Linear(input_dim, 32)
         self.actor_head = nn.Linear(32, num_actions)
@@ -47,7 +48,7 @@ class DummyDoomPolicy(nn.Module):
             features = features.flatten(1)
 
         h = torch.relu(self.encoder(features))
-        logits = self.actor_head(h)  # [batch, 9]
+        logits = self.actor_head(h)  # [batch, 12]
         values = self.critic_head(h).squeeze(-1)  # [batch]
         return logits, values, None
 
@@ -55,9 +56,8 @@ class DummyDoomPolicy(nn.Module):
 class DummyRolloutCollector:
     """Mock RolloutCollector for smoke testing training orchestration."""
 
-    def __init__(self, obs_dim: int = 16, num_actions: int = 9):
+    def __init__(self, obs_dim: int = 16):
         self.obs_dim = obs_dim
-        self.num_actions = num_actions
 
     def collect(self, policy: nn.Module, num_steps: int = 32):
         obs = torch.randn(num_steps, self.obs_dim)
@@ -81,10 +81,10 @@ class DummyRolloutCollector:
         }
 
 
-def test_bernoulli_action_sampling_and_shapes():
-    """Verify that 9 Bernoulli actions sample valid {0, 1} and return joint log_probs."""
+def test_structured_action_sampling_and_shapes():
+    """Verify that twelve policy logits produce nine valid buttons and joint log_probs."""
     batch_size = 10
-    logits = torch.randn(batch_size, 9)
+    logits = torch.randn(batch_size, NUM_ACTION_LOGITS)
 
     actions, log_probs = sample_actions(logits)
 
@@ -94,6 +94,7 @@ def test_bernoulli_action_sampling_and_shapes():
     # Actions must be binary (0 or 1)
     unique_vals = set(actions.flatten().int().tolist())
     assert unique_vals.issubset({0, 1}), f"Non-binary actions found: {unique_vals}"
+    assert (actions[:, :6].reshape(-1, 3, 2).sum(-1) <= 1).all()
 
     # Evaluate actions
     eval_log_probs, entropy = evaluate_actions(logits, actions)
@@ -169,16 +170,18 @@ def test_gae_truncation_bootstraps_terminal_observation_and_cuts_episode():
 
 def test_ppo_synthetic_batch_update_and_parameter_changes():
     """Verify PPO update produces finite metrics and modifies model parameters."""
-    model = DummyDoomPolicy(input_dim=16, num_actions=9)
+    model = DummyDoomPolicy(input_dim=16)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     # Copy initial parameter values to detect updates
     initial_params = [p.clone() for p in model.parameters()]
+    initial_actor_weight = model.actor_head.weight.detach().clone()
 
     batch_size = 64
     obs = torch.randn(batch_size, 16)
-    actions = torch.randint(0, 2, (batch_size, 9)).float()
-    old_log_probs = torch.randn(batch_size)
+    with torch.no_grad():
+        logits, _, _ = model(obs)
+        actions, old_log_probs = sample_actions(logits)
     returns = torch.randn(batch_size)
     advantages = torch.randn(batch_size)
     old_values = returns - advantages
@@ -215,11 +218,35 @@ def test_ppo_synthetic_batch_update_and_parameter_changes():
             param_changed = True
             break
     assert param_changed, "Model parameters did not change during PPO update"
+    # All twelve categorical/Bernoulli output rows must receive policy gradients.
+    assert torch.isfinite(model.actor_head.weight.grad).all()
+    assert (model.actor_head.weight.grad.abs().sum(dim=1) > 0).all()
+    assert ((initial_actor_weight - model.actor_head.weight).abs().sum(dim=1) > 0).all()
+
+
+def test_ppo_unchanged_policy_has_unit_ratios_and_zero_kl():
+    model = DummyDoomPolicy()
+    optimizer = optim.Adam(model.parameters(), lr=0.0)
+    obs = torch.randn(16, 16)
+    with torch.no_grad():
+        logits, values, _ = model(obs)
+        actions, old_log_probs = sample_actions(logits)
+    batch = {
+        "obs": obs,
+        "actions": actions,
+        "old_log_probs": old_log_probs,
+        "returns": values + torch.linspace(-1.0, 1.0, len(obs)),
+        "advantages": torch.linspace(-1.0, 1.0, len(obs)),
+        "old_values": values,
+    }
+    metrics = ppo_update(model, optimizer, batch, {"minibatch_size": 16, "update_epochs": 1})
+    assert metrics["approx_kl"] == pytest.approx(0.0, abs=1e-7)
+    assert metrics["clip_fraction"] == 0.0
 
 
 def test_checkpoint_save_and_load():
     """Verify deterministic checkpoint saving and loading."""
-    model = DummyDoomPolicy(input_dim=16, num_actions=9)
+    model = DummyDoomPolicy(input_dim=16)
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
 
     # Make one step to give optimizer non-empty state
@@ -241,7 +268,7 @@ def test_checkpoint_save_and_load():
         assert saved.exists()
 
         # Create fresh model with different initial weights
-        restored_model = DummyDoomPolicy(input_dim=16, num_actions=9)
+        restored_model = DummyDoomPolicy(input_dim=16)
         restored_optimizer = optim.Adam(restored_model.parameters(), lr=1e-3)
 
         info = load_checkpoint(
@@ -263,8 +290,8 @@ def test_checkpoint_save_and_load():
 
 def test_training_smoke_loop():
     """Verify training loop runs a few updates with mock collector without crash or NaN."""
-    model = DummyDoomPolicy(input_dim=16, num_actions=9)
-    collector = DummyRolloutCollector(obs_dim=16, num_actions=9)
+    model = DummyDoomPolicy(input_dim=16)
+    collector = DummyRolloutCollector(obs_dim=16)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         cfg = default_train_config()
@@ -289,8 +316,8 @@ def test_training_smoke_loop():
 
 
 if __name__ == "__main__":
-    print("Running test_bernoulli_action_sampling_and_shapes...")
-    test_bernoulli_action_sampling_and_shapes()
+    print("Running test_structured_action_sampling_and_shapes...")
+    test_structured_action_sampling_and_shapes()
     print("Running test_gae_terminal_handling...")
     test_gae_terminal_handling()
     print("Running test_ppo_synthetic_batch_update_and_parameter_changes...")

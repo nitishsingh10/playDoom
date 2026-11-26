@@ -1,0 +1,71 @@
+{
+  "baseline": {
+    "source_directory": "User-supplied Downloads folder (preserved locally under training/runs/legacy_baseline)",
+    "config": {
+      "deterministic_eval": false,
+      "action_threshold": 0.5,
+      "use_rgb": false,
+      "use_depth": false,
+      "hidden_size": 32,
+      "fusion_size": 128
+    },
+    "files": {
+      "checkpoint.pt": {
+        "path": "training/runs/legacy_baseline/checkpoint.pt",
+        "sha256": "2640b1249c50a155d9a37423fe78b59c0912c26eed7a7590614070681e5f3c23"
+      },
+      "config.json": {
+        "path": "training/runs/legacy_baseline/config.json",
+        "sha256": "ba7dab1de5ac51c2082f9f0f2a8b2c5de2f7922beb2306d9760d8f72f2f44b5c"
+      }
+    },
+    "inferred_architecture_id": "doom_bernoulli_v1",
+    "original_metadata": "model_state_dict only; no training-step provenance"
+  },
+  "candidate": {
+    "checkpoint.pt": {
+      "path": "training/runs/structured_v1/export/checkpoint.pt",
+      "sha256": "d9ffabbc0fb3b229acda840fdc667b19d7526c1fd4dd4a12a8c6da7f7496b11e"
+    },
+    "config.json": {
+      "path": "training/runs/structured_v1/export/config.json",
+      "sha256": "6af7935c9f0c377388eaa6d8ef63346edaa79a03c5f38ff3643c26357c5bbbf7"
+    },
+    "architecture_id": "doom_structured_v1"
+  },
+  "maps": [
+    "maps/training/tier1_projectile.wad:MAP01",
+    "maps/training/tier2_door.wad:MAP01",
+    "maps/training/tier3_red_key.wad:MAP01"
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "episode_ticks": 2100,
+  "modes": [
+    "stochastic",
+    "deterministic"
+  ],
+  "primary_mode": "stochastic",
+  "device": "cpu",
+  "candidate_training_decisions": 64,
+  "baseline_training_decisions": null,
+  "runtime": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.6",
+    "torch": "2.15.0",
+    "vizdoom": "1.3.3",
+    "gymnasium": "1.4.0",
+    "numpy": "2.5.4",
+    "cuda_available": false
+  },
+  "map_sha256": {
+    "maps/training/tier1_projectile.wad:MAP01": "2510a5161241d52c42a94f10d75032331aa5b8741effa0ce6cfa496f0bb1a43c",
+    "maps/training/tier2_door.wad:MAP01": "8b08151fa363f082ae79ba30e4bb3e1970eea65c8ea70c5ba5873e727282ab01",
+    "maps/training/tier3_red_key.wad:MAP01": "ea6a0b17bca7beae8dc928e9c3b6ced51eceacf1f3c1421d7a98a698a966445e"
+  }
+}

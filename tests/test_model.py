@@ -52,7 +52,7 @@ def test_encoder_and_policy_shapes_are_finite(entity_count, batch_size):
     with torch.inference_mode():
         logits, value, next_hidden = model(encoded)
 
-    assert logits.shape == (batch_size, len(doom_spaces.BUTTONS))
+    assert logits.shape == (batch_size, 12)
     assert value.shape == (batch_size,)
     assert next_hidden is None
     assert torch.isfinite(logits).all()
@@ -108,4 +108,3 @@ def test_policy_accepts_raw_observation_and_matches_encoded_path():
         encoded_logits, encoded_value, _ = model(encoded)
     assert torch.allclose(raw_logits, encoded_logits)
     assert torch.allclose(raw_value, encoded_value)
-

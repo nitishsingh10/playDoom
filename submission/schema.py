@@ -19,10 +19,11 @@ DEFAULT_WEIGHTS_FILENAME = "checkpoint.pt"
 
 @dataclass
 class PolicyConfig:
+    architecture_id: str = "doom_structured_v1"
     use_rgb: bool = False
     use_depth: bool = False
     deterministic_eval: bool = True
-    action_threshold: float = 0.5
+    action_threshold: float = 0.5  # Legacy baseline setting; structured modes use distribution modes.
     hidden_size: int = 32
     fusion_size: int = 128
 

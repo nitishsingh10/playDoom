@@ -2,6 +2,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -70,6 +72,7 @@ def test_requirements_rules(tmp_path):
     assert "unsupported line" in out.stdout and out.returncode == 1
 
 
+@pytest.mark.skipif(sys.platform != "linux", reason="CPU affinity and /proc RSS checks require Linux")
 def test_cpu_and_ram_limits_are_emulated(tmp_path):
     """The agent runs on one core with single-threaded numeric libraries, and its RAM is measured."""
     import os
@@ -119,7 +122,11 @@ def test_agent_loads_tensor_checkpoint_without_training_import(tmp_path, monkeyp
 
     weights_dir = tmp_path / "weights"
     weights_dir.mkdir()
-    torch.save(DoomPolicy().state_dict(), weights_dir / "checkpoint.pt")
+    from training.checkpoint import save_checkpoint
+    from training.export_checkpoint import export_checkpoint
+
+    save_checkpoint(tmp_path / "training.pt", DoomPolicy())
+    export_checkpoint(tmp_path / "training.pt", weights_dir / "checkpoint.pt")
     monkeypatch.setattr(agent_module, "WEIGHTS_DIR", weights_dir)
     monkeypatch.setitem(sys.modules, "training.model", None)
 

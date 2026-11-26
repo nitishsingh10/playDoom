@@ -7,12 +7,12 @@ Owned by Member 1 (Tech Lead / Integrator).
 from __future__ import annotations
 
 from pathlib import Path
+from pickle import UnpicklingError
 from typing import Any
 
 import numpy as np
 
 from submission.schema import (
-    ACTION_DIM,
     DEFAULT_CONFIG_FILENAME,
     DEFAULT_WEIGHTS_FILENAME,
     EdgeTriggerTracker,
@@ -28,12 +28,15 @@ WEIGHTS_DIR = SUBMISSION_DIR / "weights"
 class DoomAgent:
     """Contract-compliant stateful DOOM evaluation agent."""
 
-    def __init__(self, observation_space, action_space, device: str):
+    def __init__(self, observation_space, action_space, device: str, *, weights_dir: Path | str | None = None):
         """Called once. Load config/weights relative to submission/ onto `device`."""
         self.observation_space = observation_space
         self.action_space = action_space
         self.device = device
-        self.rng = np.random.default_rng(0)
+        import torch
+
+        torch.set_num_threads(1)
+        self.weights_dir = Path(weights_dir) if weights_dir is not None else WEIGHTS_DIR
 
         self.config = self._load_config()
         self.model = None
@@ -44,13 +47,13 @@ class DoomAgent:
         self._load_policy_if_available()
 
     def _load_config(self) -> PolicyConfig:
-        cfg_path = WEIGHTS_DIR / DEFAULT_CONFIG_FILENAME
+        cfg_path = self.weights_dir / DEFAULT_CONFIG_FILENAME
         if cfg_path.is_file():
             return PolicyConfig.load_json(cfg_path)
         return PolicyConfig()
 
     def _load_policy_if_available(self) -> None:
-        weights_path = WEIGHTS_DIR / DEFAULT_WEIGHTS_FILENAME
+        weights_path = self.weights_dir / DEFAULT_WEIGHTS_FILENAME
         if not weights_path.is_file():
             # Fallback baseline before trained weights are promoted to submission/weights/.
             self.model = None
@@ -58,11 +61,26 @@ class DoomAgent:
         import torch  # noqa: PLC0415
 
         from submission.model import build_policy  # noqa: PLC0415
+        from submission.checkpoint import (  # noqa: PLC0415
+            CheckpointCompatibilityError, STRUCTURED_ARCHITECTURE_ID, load_policy_state,
+        )
+
+        if self.config.architecture_id != STRUCTURED_ARCHITECTURE_ID:
+            raise CheckpointCompatibilityError(
+                "DoomAgent requires doom_structured_v1. Use training.evaluate --legacy-baseline "
+                "for an explicit comparison of preserved nine-logit weights."
+            )
 
         model = build_policy(self.config)
-        state = torch.load(weights_path, map_location=self.device, weights_only=True)
-        model_state = state["model_state_dict"] if isinstance(state, dict) and "model_state_dict" in state else state
-        model.load_state_dict(model_state)
+        try:
+            state = torch.load(weights_path, map_location=self.device, weights_only=True)
+        except UnpicklingError as error:
+            raise CheckpointCompatibilityError(
+                "DoomAgent requires a tensor-only, versioned inference export. Export resumable "
+                "checkpoints with training.export_checkpoint; legacy nine-logit weights require "
+                "training.evaluate --legacy-baseline and cannot load into this agent."
+            ) from error
+        load_policy_state(model, state)
         model.to(self.device)
         model.eval()
         self.model = model
@@ -84,7 +102,11 @@ class DoomAgent:
         )
 
         if self.model is None:
-            raw_action = self.rng.integers(0, 2, size=(ACTION_DIM,), dtype=np.int8)
+            import torch
+            from submission.actions import NUM_ACTION_LOGITS, StructuredActionDistribution
+
+            distribution = StructuredActionDistribution(torch.zeros(NUM_ACTION_LOGITS))
+            raw_action = (distribution.mode() if self.config.deterministic_eval else distribution.sample()).numpy()
         else:
             raw_action = self._infer_action(processed)
 
@@ -95,6 +117,7 @@ class DoomAgent:
 
     def _infer_action(self, processed: dict[str, np.ndarray]) -> np.ndarray:
         import torch  # noqa: PLC0415
+        from submission.actions import StructuredActionDistribution
 
         with torch.inference_mode():
             batch = {
@@ -103,9 +126,6 @@ class DoomAgent:
             }
             logits, _, next_hidden = self.model.step(batch, self.hidden_state)
             self.hidden_state = next_hidden
-            probs = torch.sigmoid(logits.squeeze(0))
-            if self.config.deterministic_eval:
-                bits = (probs >= self.config.action_threshold).to(torch.int8)
-            else:
-                bits = torch.bernoulli(probs).to(torch.int8)
-            return bits.cpu().numpy()
+            distribution = StructuredActionDistribution(logits)
+            action = distribution.mode() if self.config.deterministic_eval else distribution.sample()
+            return action.squeeze(0).cpu().numpy()

@@ -32,12 +32,12 @@ flowchart TD
         EntMLP["Entity MLP + Masked Mean/Max Pooling"]
         VitMLP["Vitals MLP Sub-Encoder"]
         Fusion["Multimodal Shared Fusion MLP"]
-        ActorHead["Actor Head (9 Bernoulli Logits)"]
+        ActorHead["Actor Head (12 Structured Logits)"]
         CriticHead["Critic Head (Scalar Value)"]
     end
 
     subgraph Training["RL Training Loop (training/)"]
-        Rollout["RolloutCollector<br/>(Parallel Workers)"]
+        Rollout["RolloutCollector<br/>(Single Environment)"]
         RewardShaper["Multi-Objective RewardShaper<br/>(Exploration, Combat, Keys, Anti-Stall)"]
         PPO["Custom PPO Update & GAE<br/>(Clipped Surrogate, Entropy Bonus)"]
         Checkpointer["Deterministic Checkpointing<br/>(save/load checkpoint.pt)"]
@@ -74,14 +74,14 @@ flowchart TD
 * **64 Ego-Centric Raycasts**: Spread evenly across 360° up to 1024 map units. Normalized distances $[0, 1]$ combined with 6-class one-hot categorical hit types (none, wall, door, locked door, enemy, pickup item).
 * **Visible Entities (Field-of-View)**: Up to 32 visible entities within 90° FOV and line of sight. Includes scaled distance, trigonometric angles ($\sin, \cos$), relative velocities in player frame, and 12-class one-hot entity types. Padded slots are strictly zero-masked.
 * **Player Vitals (17-dim)**: Normalized health, armor, selected weapon, ammo reserves across 4 weapon types, persistent keycard acquisition flags, and 3D velocity telemetry.
-* **Efficiency**: Operates without heavy raw RGB/depth convolutions, achieving step latencies $< 0.2$ ms.
+* **Efficiency**: Operates without raw RGB/depth convolutions. The structured smoke export had approximately 0.8 ms median action latency in the local CPU validator; deployment hardware should be measured separately.
 
 ### 2. Bespoke Neural Topology (`submission/model.py`)
 * **Sub-Encoders**: Dedicated linear modules for rays ($32$-dim), entities ($32$-dim), and vitals ($32$-dim).
 * **Masked Mean & Max Pooling**: Aggregates variable-length visible entity lists into a fixed representation without dimension collapse or NaN gradients when zero enemies/items are visible.
 * **Shared Fusion**: Combines spatial summaries into a 128-dim shared latent space with non-linear activations.
 * **Dual Heads**:
-  * **Actor Head**: Outputs 9 independent Bernoulli logits representing binary action button states.
+  * **Actor Head**: Outputs 12 logits: three categorical decisions (none/first/second direction) and three Bernoulli decisions (attack/use/weapon). The shared `submission/actions.py` distribution produces the official nine-button vector without opposing movement or rotation buttons.
   * **Critic Head**: Outputs a scalar state-value estimate $V(s)$.
 * **Inference-Ready**: Includes `.step()` and `.init_hidden()` interfaces matching both the evaluation harness and training loops.
 
@@ -89,12 +89,12 @@ flowchart TD
 * **Custom PPO & GAE (`training/ppo.py`)**:
   * Implements clipped surrogate policy objective, value function loss clipping, and entropy exploration bonus.
   * Generalized Advantage Estimation (GAE) handles true terminal death/exit vs. time-limit horizon truncations without bootstrapping across episode boundaries.
-  * Independent Bernoulli action sampling and joint log-probability computation.
+  * Shared structured sampling, joint log probabilities and entropy for collection, PPO replay and inference.
 * **Multi-Objective Reward Shaping (`training/rewards.py`)**:
-  * Privileged engine state (isolated strictly to training) rewards keycard collection, unlocking locked doors, kills, and spatial area discovery.
+  * Privileged engine state (isolated from policy inputs) rewards keycard collection, kills, item pickup, exits and spatial area discovery.
   * Anti-exploit penalties suppress door-use spamming, spinning in place, and wall stalling.
 * **Rollout Collection (`training/rollout.py`)**:
-  * Gathers multi-step trajectories across vectorized environments with episode boundary handling.
+  * Gathers multi-step trajectories from one environment with episode boundary handling; the training factory selects a map on each reset.
 * **Deterministic Checkpointing (`training/checkpoint.py`)**:
   * Preserves model weights, optimizer states, update counts, and training configuration.
 
@@ -138,8 +138,8 @@ flowchart TD
 │   └── weights/                 # Checkpoint directory (checkpoint.pt)
 │
 ├── training/                    # Custom RL training pipeline
-│   ├── ppo.py                   # Custom PPO loss, GAE, and Bernoulli distributions
-│   ├── rollout.py               # Vectorized RolloutCollector
+│   ├── ppo.py                   # Custom PPO loss, GAE, and shared structured distribution
+│   ├── rollout.py               # Single-environment RolloutCollector
 │   ├── rewards.py               # Training-only multi-objective RewardShaper
 │   ├── train.py                 # Training orchestrator and execution loop
 │   ├── checkpoint.py            # Checkpoint save/resume logic
@@ -214,14 +214,20 @@ python -m training.train \
     --updates 500 \
     --rollout-steps 256 \
     --lr 3e-4 \
-    --save-dir checkpoints \
+    --save-dir training/runs/structured_v1/checkpoints \
     --device cpu  # or cuda
 ```
 
 To export the trained checkpoint for evaluation:
 ```bash
-cp checkpoints/checkpoint_latest.pt submission/weights/checkpoint.pt
+python -m training.export_checkpoint training/runs/structured_v1/checkpoints/checkpoint_latest.pt
+python -m training.validate_checkpoint training/runs/structured_v1/export
 ```
+
+Exports use versioned structured weights and a matching config in a separate experiment directory.
+Preserve existing baseline weights/config until paired gameplay evaluation justifies promotion.
+See [the structured policy experiment report](reports/structured_policy_2026-11-26.md) for the
+action contract, measured smoke results, limitations and reproduction commands.
 
 ### 5. Docker Evaluation Check
 

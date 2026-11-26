@@ -3,8 +3,8 @@
 Owned by Member 2 (PPO and Optimization Engineer).
 Provides:
   - compute_gae: Generalized Advantage Estimation with terminal vs truncation distinction
-  - evaluate_actions: Computes log probs and entropy for 9 independent Bernoulli action dimensions
-  - sample_actions: Samples binary actions from logits and returns log probs
+  - evaluate_actions: Computes structured action log probabilities and entropy
+  - sample_actions: Samples valid nine-button actions from twelve policy logits
   - ppo_update: Mini-batch clipped surrogate objective, value loss, entropy bonus, gradient clipping
 """
 
@@ -15,30 +15,26 @@ from typing import Any, Dict, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.distributions.bernoulli import Bernoulli
+
+from submission.actions import StructuredActionDistribution
 
 
 def sample_actions(
     logits: torch.Tensor,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    """Sample binary actions from Bernoulli logits and compute their log probabilities.
-
-    Each action dimension is treated as an independent Bernoulli variable:
-      P(action_i = 1) = sigmoid(logits_i)
+    """Sample structured actions and compute their joint log probabilities.
 
     Args:
-        logits: Tensor of shape [batch, 9] or [..., 9] containing unnormalized Bernoulli logits.
+        logits: Tensor of shape [..., 12] containing three categorical groups
+            followed by attack, use, and weapon-selection Bernoulli logits.
 
     Returns:
-        actions: Binary tensor of shape [batch, 9] with values in {0, 1} (int8 or float32).
-        log_prob: Tensor of shape [batch] containing sum of log probabilities across 9 dimensions:
-                  sum_{i=0}^8 log P(action_i | logits_i)
+        actions: Binary int8 tensor of shape [..., 9], without opposing directions.
+        log_prob: Tensor with the leading batch shape, summed over all six decisions.
     """
-    dist = Bernoulli(logits=logits)
-    actions = dist.sample()  # shape [batch, 9] in {0.0, 1.0}
-    # Log prob per dimension is shape [batch, 9], sum over the 9 action dimensions
-    log_probs = dist.log_prob(actions).sum(dim=-1)  # shape [batch]
-    return actions, log_probs
+    dist = StructuredActionDistribution(logits)
+    actions = dist.sample()
+    return actions, dist.log_prob(actions)
 
 
 def evaluate_actions(
@@ -48,17 +44,15 @@ def evaluate_actions(
     """Evaluate log probabilities and entropy of given actions under policy logits.
 
     Args:
-        logits: Tensor of shape [batch, 9] with unnormalized Bernoulli logits.
-        actions: Tensor of shape [batch, 9] with binary action values in {0, 1}.
+        logits: Tensor of shape [..., 12] with structured policy logits.
+        actions: Tensor of shape [..., 9] with valid binary button values.
 
     Returns:
-        log_prob: Tensor of shape [batch], joint log probability of actions.
-        entropy: Tensor of shape [batch], sum of Bernoulli entropies over 9 dimensions.
+        log_prob: Tensor with the leading batch shape, joint action log probability.
+        entropy: Tensor with the leading batch shape, sum over all six decisions.
     """
-    dist = Bernoulli(logits=logits)
-    log_prob = dist.log_prob(actions.float()).sum(dim=-1)  # shape [batch]
-    entropy = dist.entropy().sum(dim=-1)  # shape [batch]
-    return log_prob, entropy
+    dist = StructuredActionDistribution(logits)
+    return dist.log_prob(actions), dist.entropy()
 
 
 def compute_gae(
@@ -221,7 +215,7 @@ def ppo_update(
                 mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
 
             # Model forward call
-            # Policy forward is expected to return (action_logits [B, 9], value [B], next_hidden)
+            # Policy forward returns (action_logits [B, 12], value [B], next_hidden).
             forward_out = model(mb_obs)
             if isinstance(forward_out, (tuple, list)):
                 logits = forward_out[0]
@@ -231,7 +225,7 @@ def ppo_update(
 
             values = values.view(-1)
 
-            # Evaluate new log_probs and entropy for the 9 Bernoulli action dims
+            # Replay the exact structured decisions represented by the nine buttons.
             new_log_probs, entropy = evaluate_actions(logits, mb_actions)
 
             # Ratio = exp(new_log_prob - old_log_prob)

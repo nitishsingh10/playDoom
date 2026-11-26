@@ -1,0 +1,1658 @@
+{
+  "checkpoint": "training/runs/legacy_baseline/checkpoint.pt",
+  "architecture_id": "doom_bernoulli_v1",
+  "action_mode": "stochastic",
+  "action_threshold": 0.5,
+  "episode_ticks": 2100,
+  "episodes": 15,
+  "exit_rate": 0.6666666666666666,
+  "survival_rate": 0.6666666666666666,
+  "mean_raw_return": 0.3333333333333333,
+  "mean_kills": 0,
+  "mean_damage_taken": 35.6,
+  "mean_keycards": 0.3333333333333333,
+  "mean_ammo_remaining": 47.46666666666667,
+  "mean_unique_cells": 7.466666666666667,
+  "action_conflicts": {
+    "forward_backward": {
+      "count": 218,
+      "percentage": 12.645011600928074
+    },
+    "left_right": {
+      "count": 170,
+      "percentage": 9.860788863109049
+    },
+    "turn_left_right": {
+      "count": 510,
+      "percentage": 29.582366589327147
+    }
+  },
+  "reward_config_for_diagnostics": {
+    "exit_reward": 10.0,
+    "death_penalty": 5.0,
+    "key_reward": 5.0,
+    "item_reward": 0.5,
+    "kill_reward": 2.0,
+    "damage_penalty_coef": 0.02,
+    "cell_size": 64.0,
+    "exploration_reward": 0.5,
+    "movement_reward_coef": 0.001,
+    "max_movement_reward_per_step": 0.05,
+    "min_movement_threshold": 2.0,
+    "living_penalty": 0.001,
+    "anti_spin_penalty": 0.02,
+    "spin_angle_threshold_deg": 15.0,
+    "anti_door_spam_penalty": 0.02,
+    "use_cooldown_steps": 8,
+    "env_reward_scale": 1.0
+  },
+  "metric_definitions": {
+    "conflict_percentage": "Exact simultaneous opposing-button decisions / all decisions * 100.",
+    "enemy_visible": "Mask=1 and enemy entity type 1, 2 or 3 in the action's input observation (FOV and line of sight).",
+    "useful_range_units": 1024.0,
+    "useful_range": "Visible enemy center distance = raw entity feature[0] * 1024 <= useful_range_units. Distance proxy only; not weapon-specific reach, aim or successful damage.",
+    "attack_percentage": "Attack+enemy condition decisions / decisions satisfying that condition * 100.",
+    "forward_ray_enemy": "Observation ray index 0 (straight ahead) has enemy hit type; a cue, not confirmed damage.",
+    "edge_counts": "Button=1 after previous decision button=0, with previous=0 at reset. Activation counts include held decisions.",
+    "weapon_selection_changes": "Changes in selected weapon ID across decisions, including automatic and delayed switches; distinct from button activations and edges.",
+    "zero_selected_weapon_ammo": "Reported selected weapon ammo <=0; melee weapons can attack without ammo.",
+    "reward_components": "Default training reward-shaper totals recomputed for diagnosis only; no effect on evaluation actions."
+  },
+  "episodes_detail": [
+    {
+      "map": "maps/training/tier1_projectile.wad:MAP01",
+      "seed": 0,
+      "decisions": 86,
+      "ticks": 342,
+      "raw_return": -1.0,
+      "exit_reached": false,
+      "dead": true,
+      "timeout": false,
+      "termination_reason": "death",
+      "kills": 0,
+      "damage_taken": 102.0,
+      "initial_health": 100.0,
+      "final_health": -2.0,
+      "final_selected_weapon": 1.0,
+      "final_selected_weapon_ammo": 0.0,
+      "keycards": 0,
+      "ammo_remaining": 50.0,
+      "unique_cells": 3,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": -1.0,
+        "exit": 0.0,
+        "death": -5.0,
+        "kill": 0.0,
+        "damage": -2.04,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 1.0,
+        "movement": 0.032371920080783684,
+        "living": -0.08600000000000006,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.04,
+        "total_shaped_reward": -7.133628079919216,
+        "unique_cells_visited": 3.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 52,
+          "percentage": 60.46511627906977
+        },
+        "MOVE_BACKWARD": {
+          "count": 32,
+          "percentage": 37.2093023255814
+        },
+        "MOVE_LEFT": {
+          "count": 54,
+          "percentage": 62.7906976744186
+        },
+        "MOVE_RIGHT": {
+          "count": 28,
+          "percentage": 32.55813953488372
+        },
+        "TURN_LEFT": {
+          "count": 56,
+          "percentage": 65.11627906976744
+        },
+        "TURN_RIGHT": {
+          "count": 52,
+          "percentage": 60.46511627906977
+        },
+        "ATTACK": {
+          "count": 32,
+          "percentage": 37.2093023255814
+        },
+        "USE": {
+          "count": 60,
+          "percentage": 69.76744186046511
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 38,
+          "percentage": 44.18604651162791
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 18,
+          "percentage": 20.930232558139537
+        },
+        "left_right": {
+          "count": 16,
+          "percentage": 18.6046511627907
+        },
+        "turn_left_right": {
+          "count": 31,
+          "percentage": 36.04651162790697
+        }
+      },
+      "enemy_visible_steps": 78,
+      "enemy_useful_range_steps": 78,
+      "attack_activations": 32,
+      "attack_while_enemy_visible": 29,
+      "attack_while_enemy_visible_percentage": 37.17948717948718,
+      "attack_while_enemy_in_useful_range": 29,
+      "attack_while_enemy_in_useful_range_percentage": 37.17948717948718,
+      "forward_ray_enemy_steps": 27,
+      "attack_while_forward_ray_enemy": 9,
+      "selected_weapon_ammo_zero_steps": 58,
+      "attack_with_zero_selected_weapon_ammo": 25,
+      "use_activations": 60,
+      "use_button_down_edges": 17,
+      "weapon_select_activations": 38,
+      "weapon_select_button_down_edges": 18,
+      "weapon_selection_changes": 11,
+      "failure_mode": "early_death"
+    },
+    {
+      "map": "maps/training/tier1_projectile.wad:MAP01",
+      "seed": 1,
+      "decisions": 70,
+      "ticks": 281,
+      "raw_return": -1.0,
+      "exit_reached": false,
+      "dead": true,
+      "timeout": false,
+      "termination_reason": "death",
+      "kills": 0,
+      "damage_taken": 114.0,
+      "initial_health": 100.0,
+      "final_health": -14.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 48.0,
+      "keycards": 0,
+      "ammo_remaining": 48.0,
+      "unique_cells": 5,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": -1.0,
+        "exit": 0.0,
+        "death": -5.0,
+        "kill": 0.0,
+        "damage": -2.28,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 2.0,
+        "movement": 0.053851905465699776,
+        "living": -0.07000000000000005,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.06,
+        "total_shaped_reward": -6.3561480945343,
+        "unique_cells_visited": 5.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 47,
+          "percentage": 67.14285714285714
+        },
+        "MOVE_BACKWARD": {
+          "count": 25,
+          "percentage": 35.714285714285715
+        },
+        "MOVE_LEFT": {
+          "count": 51,
+          "percentage": 72.85714285714286
+        },
+        "MOVE_RIGHT": {
+          "count": 17,
+          "percentage": 24.285714285714285
+        },
+        "TURN_LEFT": {
+          "count": 36,
+          "percentage": 51.42857142857143
+        },
+        "TURN_RIGHT": {
+          "count": 43,
+          "percentage": 61.42857142857143
+        },
+        "ATTACK": {
+          "count": 33,
+          "percentage": 47.142857142857146
+        },
+        "USE": {
+          "count": 41,
+          "percentage": 58.57142857142857
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 32,
+          "percentage": 45.714285714285715
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 14,
+          "percentage": 20.0
+        },
+        "left_right": {
+          "count": 14,
+          "percentage": 20.0
+        },
+        "turn_left_right": {
+          "count": 21,
+          "percentage": 30.0
+        }
+      },
+      "enemy_visible_steps": 50,
+      "enemy_useful_range_steps": 50,
+      "attack_activations": 33,
+      "attack_while_enemy_visible": 26,
+      "attack_while_enemy_visible_percentage": 52.0,
+      "attack_while_enemy_in_useful_range": 26,
+      "attack_while_enemy_in_useful_range_percentage": 52.0,
+      "forward_ray_enemy_steps": 30,
+      "attack_while_forward_ray_enemy": 16,
+      "selected_weapon_ammo_zero_steps": 17,
+      "attack_with_zero_selected_weapon_ammo": 9,
+      "use_activations": 41,
+      "use_button_down_edges": 18,
+      "weapon_select_activations": 32,
+      "weapon_select_button_down_edges": 17,
+      "weapon_selection_changes": 14,
+      "failure_mode": "early_death"
+    },
+    {
+      "map": "maps/training/tier1_projectile.wad:MAP01",
+      "seed": 2,
+      "decisions": 84,
+      "ticks": 337,
+      "raw_return": -1.0,
+      "exit_reached": false,
+      "dead": true,
+      "timeout": false,
+      "termination_reason": "death",
+      "kills": 0,
+      "damage_taken": 108.0,
+      "initial_health": 100.0,
+      "final_health": -8.0,
+      "final_selected_weapon": 1.0,
+      "final_selected_weapon_ammo": 0.0,
+      "keycards": 0,
+      "ammo_remaining": 48.0,
+      "unique_cells": 4,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": -1.0,
+        "exit": 0.0,
+        "death": -5.0,
+        "kill": 0.0,
+        "damage": -2.16,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 1.5,
+        "movement": 0.030191757454046727,
+        "living": -0.08400000000000006,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.04,
+        "total_shaped_reward": -6.753808242545953,
+        "unique_cells_visited": 4.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 62,
+          "percentage": 73.80952380952381
+        },
+        "MOVE_BACKWARD": {
+          "count": 28,
+          "percentage": 33.333333333333336
+        },
+        "MOVE_LEFT": {
+          "count": 64,
+          "percentage": 76.19047619047619
+        },
+        "MOVE_RIGHT": {
+          "count": 23,
+          "percentage": 27.38095238095238
+        },
+        "TURN_LEFT": {
+          "count": 51,
+          "percentage": 60.714285714285715
+        },
+        "TURN_RIGHT": {
+          "count": 52,
+          "percentage": 61.904761904761905
+        },
+        "ATTACK": {
+          "count": 28,
+          "percentage": 33.333333333333336
+        },
+        "USE": {
+          "count": 53,
+          "percentage": 63.095238095238095
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 37,
+          "percentage": 44.04761904761905
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 19,
+          "percentage": 22.61904761904762
+        },
+        "left_right": {
+          "count": 14,
+          "percentage": 16.666666666666668
+        },
+        "turn_left_right": {
+          "count": 28,
+          "percentage": 33.333333333333336
+        }
+      },
+      "enemy_visible_steps": 70,
+      "enemy_useful_range_steps": 70,
+      "attack_activations": 28,
+      "attack_while_enemy_visible": 25,
+      "attack_while_enemy_visible_percentage": 35.714285714285715,
+      "attack_while_enemy_in_useful_range": 25,
+      "attack_while_enemy_in_useful_range_percentage": 35.714285714285715,
+      "forward_ray_enemy_steps": 9,
+      "attack_while_forward_ray_enemy": 2,
+      "selected_weapon_ammo_zero_steps": 27,
+      "attack_with_zero_selected_weapon_ammo": 10,
+      "use_activations": 53,
+      "use_button_down_edges": 23,
+      "weapon_select_activations": 37,
+      "weapon_select_button_down_edges": 20,
+      "weapon_selection_changes": 15,
+      "failure_mode": "early_death"
+    },
+    {
+      "map": "maps/training/tier1_projectile.wad:MAP01",
+      "seed": 3,
+      "decisions": 72,
+      "ticks": 288,
+      "raw_return": -1.0,
+      "exit_reached": false,
+      "dead": true,
+      "timeout": false,
+      "termination_reason": "death",
+      "kills": 0,
+      "damage_taken": 102.0,
+      "initial_health": 100.0,
+      "final_health": -2.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 50.0,
+      "keycards": 0,
+      "ammo_remaining": 50.0,
+      "unique_cells": 5,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": -1.0,
+        "exit": 0.0,
+        "death": -5.0,
+        "kill": 0.0,
+        "damage": -2.04,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 2.0,
+        "movement": 0.06283791675022117,
+        "living": -0.07200000000000005,
+        "anti_spin": 0.0,
+        "anti_door_spam": 0.0,
+        "total_shaped_reward": -6.0491620832497786,
+        "unique_cells_visited": 5.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 51,
+          "percentage": 70.83333333333333
+        },
+        "MOVE_BACKWARD": {
+          "count": 28,
+          "percentage": 38.888888888888886
+        },
+        "MOVE_LEFT": {
+          "count": 49,
+          "percentage": 68.05555555555556
+        },
+        "MOVE_RIGHT": {
+          "count": 27,
+          "percentage": 37.5
+        },
+        "TURN_LEFT": {
+          "count": 49,
+          "percentage": 68.05555555555556
+        },
+        "TURN_RIGHT": {
+          "count": 44,
+          "percentage": 61.111111111111114
+        },
+        "ATTACK": {
+          "count": 19,
+          "percentage": 26.38888888888889
+        },
+        "USE": {
+          "count": 54,
+          "percentage": 75.0
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 37,
+          "percentage": 51.388888888888886
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 20,
+          "percentage": 27.77777777777778
+        },
+        "left_right": {
+          "count": 17,
+          "percentage": 23.61111111111111
+        },
+        "turn_left_right": {
+          "count": 30,
+          "percentage": 41.666666666666664
+        }
+      },
+      "enemy_visible_steps": 65,
+      "enemy_useful_range_steps": 65,
+      "attack_activations": 19,
+      "attack_while_enemy_visible": 17,
+      "attack_while_enemy_visible_percentage": 26.153846153846153,
+      "attack_while_enemy_in_useful_range": 17,
+      "attack_while_enemy_in_useful_range_percentage": 26.153846153846153,
+      "forward_ray_enemy_steps": 18,
+      "attack_while_forward_ray_enemy": 5,
+      "selected_weapon_ammo_zero_steps": 42,
+      "attack_with_zero_selected_weapon_ammo": 12,
+      "use_activations": 54,
+      "use_button_down_edges": 11,
+      "weapon_select_activations": 37,
+      "weapon_select_button_down_edges": 19,
+      "weapon_selection_changes": 16,
+      "failure_mode": "early_death"
+    },
+    {
+      "map": "maps/training/tier1_projectile.wad:MAP01",
+      "seed": 4,
+      "decisions": 69,
+      "ticks": 275,
+      "raw_return": -1.0,
+      "exit_reached": false,
+      "dead": true,
+      "timeout": false,
+      "termination_reason": "death",
+      "kills": 0,
+      "damage_taken": 108.0,
+      "initial_health": 100.0,
+      "final_health": -8.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 48.0,
+      "keycards": 0,
+      "ammo_remaining": 48.0,
+      "unique_cells": 5,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": -1.0,
+        "exit": 0.0,
+        "death": -5.0,
+        "kill": 0.0,
+        "damage": -2.1599999999999997,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 2.0,
+        "movement": 0.07314493429722653,
+        "living": -0.06900000000000005,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.02,
+        "total_shaped_reward": -6.175855065702773,
+        "unique_cells_visited": 5.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 55,
+          "percentage": 79.71014492753623
+        },
+        "MOVE_BACKWARD": {
+          "count": 17,
+          "percentage": 24.63768115942029
+        },
+        "MOVE_LEFT": {
+          "count": 44,
+          "percentage": 63.768115942028984
+        },
+        "MOVE_RIGHT": {
+          "count": 19,
+          "percentage": 27.536231884057973
+        },
+        "TURN_LEFT": {
+          "count": 43,
+          "percentage": 62.31884057971015
+        },
+        "TURN_RIGHT": {
+          "count": 42,
+          "percentage": 60.869565217391305
+        },
+        "ATTACK": {
+          "count": 19,
+          "percentage": 27.536231884057973
+        },
+        "USE": {
+          "count": 38,
+          "percentage": 55.072463768115945
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 30,
+          "percentage": 43.47826086956522
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 12,
+          "percentage": 17.391304347826086
+        },
+        "left_right": {
+          "count": 12,
+          "percentage": 17.391304347826086
+        },
+        "turn_left_right": {
+          "count": 27,
+          "percentage": 39.130434782608695
+        }
+      },
+      "enemy_visible_steps": 63,
+      "enemy_useful_range_steps": 63,
+      "attack_activations": 19,
+      "attack_while_enemy_visible": 17,
+      "attack_while_enemy_visible_percentage": 26.984126984126984,
+      "attack_while_enemy_in_useful_range": 17,
+      "attack_while_enemy_in_useful_range_percentage": 26.984126984126984,
+      "forward_ray_enemy_steps": 20,
+      "attack_while_forward_ray_enemy": 7,
+      "selected_weapon_ammo_zero_steps": 30,
+      "attack_with_zero_selected_weapon_ammo": 7,
+      "use_activations": 38,
+      "use_button_down_edges": 17,
+      "weapon_select_activations": 30,
+      "weapon_select_button_down_edges": 15,
+      "weapon_selection_changes": 10,
+      "failure_mode": "early_death"
+    },
+    {
+      "map": "maps/training/tier2_door.wad:MAP01",
+      "seed": 0,
+      "decisions": 46,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 50.0,
+      "keycards": 0,
+      "ammo_remaining": 50.0,
+      "unique_cells": 8,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 3.5,
+        "movement": 0.1640529106501821,
+        "living": -0.046000000000000034,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.04,
+        "total_shaped_reward": 14.578052910650182,
+        "unique_cells_visited": 8.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 38,
+          "percentage": 82.6086956521739
+        },
+        "MOVE_BACKWARD": {
+          "count": 4,
+          "percentage": 8.695652173913043
+        },
+        "MOVE_LEFT": {
+          "count": 34,
+          "percentage": 73.91304347826087
+        },
+        "MOVE_RIGHT": {
+          "count": 9,
+          "percentage": 19.565217391304348
+        },
+        "TURN_LEFT": {
+          "count": 24,
+          "percentage": 52.17391304347826
+        },
+        "TURN_RIGHT": {
+          "count": 32,
+          "percentage": 69.56521739130434
+        },
+        "ATTACK": {
+          "count": 19,
+          "percentage": 41.30434782608695
+        },
+        "USE": {
+          "count": 36,
+          "percentage": 78.26086956521739
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 20,
+          "percentage": 43.47826086956522
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 3,
+          "percentage": 6.521739130434782
+        },
+        "left_right": {
+          "count": 7,
+          "percentage": 15.217391304347826
+        },
+        "turn_left_right": {
+          "count": 18,
+          "percentage": 39.130434782608695
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 19,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 34,
+      "attack_with_zero_selected_weapon_ammo": 15,
+      "use_activations": 36,
+      "use_button_down_edges": 7,
+      "weapon_select_activations": 20,
+      "weapon_select_button_down_edges": 10,
+      "weapon_selection_changes": 4,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier2_door.wad:MAP01",
+      "seed": 1,
+      "decisions": 46,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 48.0,
+      "keycards": 0,
+      "ammo_remaining": 48.0,
+      "unique_cells": 8,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 3.5,
+        "movement": 0.15043623491170913,
+        "living": -0.046000000000000034,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.04,
+        "total_shaped_reward": 14.564436234911708,
+        "unique_cells_visited": 8.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 36,
+          "percentage": 78.26086956521739
+        },
+        "MOVE_BACKWARD": {
+          "count": 8,
+          "percentage": 17.391304347826086
+        },
+        "MOVE_LEFT": {
+          "count": 41,
+          "percentage": 89.1304347826087
+        },
+        "MOVE_RIGHT": {
+          "count": 4,
+          "percentage": 8.695652173913043
+        },
+        "TURN_LEFT": {
+          "count": 23,
+          "percentage": 50.0
+        },
+        "TURN_RIGHT": {
+          "count": 29,
+          "percentage": 63.04347826086956
+        },
+        "ATTACK": {
+          "count": 26,
+          "percentage": 56.52173913043478
+        },
+        "USE": {
+          "count": 29,
+          "percentage": 63.04347826086956
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 16,
+          "percentage": 34.78260869565217
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 6,
+          "percentage": 13.043478260869565
+        },
+        "left_right": {
+          "count": 4,
+          "percentage": 8.695652173913043
+        },
+        "turn_left_right": {
+          "count": 16,
+          "percentage": 34.78260869565217
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 26,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 13,
+      "attack_with_zero_selected_weapon_ammo": 8,
+      "use_activations": 29,
+      "use_button_down_edges": 10,
+      "weapon_select_activations": 16,
+      "weapon_select_button_down_edges": 11,
+      "weapon_selection_changes": 10,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier2_door.wad:MAP01",
+      "seed": 2,
+      "decisions": 165,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 1.0,
+      "final_selected_weapon_ammo": 0.0,
+      "keycards": 0,
+      "ammo_remaining": 48.0,
+      "unique_cells": 8,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 3.5,
+        "movement": 0.1036389801423746,
+        "living": -0.16500000000000012,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.3,
+        "total_shaped_reward": 14.138638980142375,
+        "unique_cells_visited": 8.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 137,
+          "percentage": 83.03030303030303
+        },
+        "MOVE_BACKWARD": {
+          "count": 32,
+          "percentage": 19.393939393939394
+        },
+        "MOVE_LEFT": {
+          "count": 134,
+          "percentage": 81.21212121212122
+        },
+        "MOVE_RIGHT": {
+          "count": 26,
+          "percentage": 15.757575757575758
+        },
+        "TURN_LEFT": {
+          "count": 72,
+          "percentage": 43.63636363636363
+        },
+        "TURN_RIGHT": {
+          "count": 111,
+          "percentage": 67.27272727272727
+        },
+        "ATTACK": {
+          "count": 73,
+          "percentage": 44.24242424242424
+        },
+        "USE": {
+          "count": 112,
+          "percentage": 67.87878787878788
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 67,
+          "percentage": 40.60606060606061
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 24,
+          "percentage": 14.545454545454545
+        },
+        "left_right": {
+          "count": 19,
+          "percentage": 11.515151515151516
+        },
+        "turn_left_right": {
+          "count": 49,
+          "percentage": 29.696969696969695
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 73,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 93,
+      "attack_with_zero_selected_weapon_ammo": 41,
+      "use_activations": 112,
+      "use_button_down_edges": 40,
+      "weapon_select_activations": 67,
+      "weapon_select_button_down_edges": 35,
+      "weapon_selection_changes": 29,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier2_door.wad:MAP01",
+      "seed": 3,
+      "decisions": 42,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 48.0,
+      "keycards": 0,
+      "ammo_remaining": 48.0,
+      "unique_cells": 8,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 3.5,
+        "movement": 0.11276752630880131,
+        "living": -0.04200000000000003,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.02,
+        "total_shaped_reward": 14.550767526308801,
+        "unique_cells_visited": 8.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 31,
+          "percentage": 73.80952380952381
+        },
+        "MOVE_BACKWARD": {
+          "count": 9,
+          "percentage": 21.428571428571427
+        },
+        "MOVE_LEFT": {
+          "count": 34,
+          "percentage": 80.95238095238095
+        },
+        "MOVE_RIGHT": {
+          "count": 5,
+          "percentage": 11.904761904761905
+        },
+        "TURN_LEFT": {
+          "count": 16,
+          "percentage": 38.095238095238095
+        },
+        "TURN_RIGHT": {
+          "count": 27,
+          "percentage": 64.28571428571429
+        },
+        "ATTACK": {
+          "count": 14,
+          "percentage": 33.333333333333336
+        },
+        "USE": {
+          "count": 32,
+          "percentage": 76.19047619047619
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 21,
+          "percentage": 50.0
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 8,
+          "percentage": 19.047619047619047
+        },
+        "left_right": {
+          "count": 4,
+          "percentage": 9.523809523809524
+        },
+        "turn_left_right": {
+          "count": 12,
+          "percentage": 28.571428571428573
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 14,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 14,
+      "attack_with_zero_selected_weapon_ammo": 9,
+      "use_activations": 32,
+      "use_button_down_edges": 6,
+      "weapon_select_activations": 21,
+      "weapon_select_button_down_edges": 12,
+      "weapon_selection_changes": 8,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier2_door.wad:MAP01",
+      "seed": 4,
+      "decisions": 277,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 1.0,
+      "final_selected_weapon_ammo": 0.0,
+      "keycards": 0,
+      "ammo_remaining": 42.0,
+      "unique_cells": 8,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 0.0,
+        "item": 0.0,
+        "exploration": 3.5,
+        "movement": 0.12012451701054608,
+        "living": -0.2770000000000002,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.4400000000000001,
+        "total_shaped_reward": 13.903124517010546,
+        "unique_cells_visited": 8.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 218,
+          "percentage": 78.70036101083032
+        },
+        "MOVE_BACKWARD": {
+          "count": 50,
+          "percentage": 18.050541516245488
+        },
+        "MOVE_LEFT": {
+          "count": 218,
+          "percentage": 78.70036101083032
+        },
+        "MOVE_RIGHT": {
+          "count": 35,
+          "percentage": 12.635379061371841
+        },
+        "TURN_LEFT": {
+          "count": 112,
+          "percentage": 40.43321299638989
+        },
+        "TURN_RIGHT": {
+          "count": 172,
+          "percentage": 62.09386281588448
+        },
+        "ATTACK": {
+          "count": 112,
+          "percentage": 40.43321299638989
+        },
+        "USE": {
+          "count": 196,
+          "percentage": 70.7581227436823
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 105,
+          "percentage": 37.90613718411552
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 39,
+          "percentage": 14.07942238267148
+        },
+        "left_right": {
+          "count": 29,
+          "percentage": 10.469314079422382
+        },
+        "turn_left_right": {
+          "count": 68,
+          "percentage": 24.548736462093864
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 112,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 131,
+      "attack_with_zero_selected_weapon_ammo": 53,
+      "use_activations": 196,
+      "use_button_down_edges": 59,
+      "weapon_select_activations": 105,
+      "weapon_select_button_down_edges": 65,
+      "weapon_selection_changes": 45,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier3_red_key.wad:MAP01",
+      "seed": 0,
+      "decisions": 112,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 1.0,
+      "final_selected_weapon_ammo": 0.0,
+      "keycards": 1,
+      "ammo_remaining": 49.0,
+      "unique_cells": 10,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 5.0,
+        "item": 0.0,
+        "exploration": 4.5,
+        "movement": 0.1760873779884245,
+        "living": -0.11200000000000009,
+        "anti_spin": 0.0,
+        "anti_door_spam": 0.0,
+        "total_shaped_reward": 20.564087377988425,
+        "unique_cells_visited": 10.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 94,
+          "percentage": 83.92857142857143
+        },
+        "MOVE_BACKWARD": {
+          "count": 8,
+          "percentage": 7.142857142857143
+        },
+        "MOVE_LEFT": {
+          "count": 104,
+          "percentage": 92.85714285714286
+        },
+        "MOVE_RIGHT": {
+          "count": 5,
+          "percentage": 4.464285714285714
+        },
+        "TURN_LEFT": {
+          "count": 46,
+          "percentage": 41.07142857142857
+        },
+        "TURN_RIGHT": {
+          "count": 82,
+          "percentage": 73.21428571428571
+        },
+        "ATTACK": {
+          "count": 42,
+          "percentage": 37.5
+        },
+        "USE": {
+          "count": 94,
+          "percentage": 83.92857142857143
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 30,
+          "percentage": 26.785714285714285
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 7,
+          "percentage": 6.25
+        },
+        "left_right": {
+          "count": 5,
+          "percentage": 4.464285714285714
+        },
+        "turn_left_right": {
+          "count": 37,
+          "percentage": 33.035714285714285
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 42,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 62,
+      "attack_with_zero_selected_weapon_ammo": 27,
+      "use_activations": 94,
+      "use_button_down_edges": 15,
+      "weapon_select_activations": 30,
+      "weapon_select_button_down_edges": 17,
+      "weapon_selection_changes": 13,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier3_red_key.wad:MAP01",
+      "seed": 1,
+      "decisions": 236,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 1.0,
+      "final_selected_weapon_ammo": 0.0,
+      "keycards": 1,
+      "ammo_remaining": 43.0,
+      "unique_cells": 10,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 5.0,
+        "item": 0.0,
+        "exploration": 4.5,
+        "movement": 0.23380472440850758,
+        "living": -0.23600000000000018,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.14,
+        "total_shaped_reward": 20.357804724408506,
+        "unique_cells_visited": 10.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 208,
+          "percentage": 88.13559322033899
+        },
+        "MOVE_BACKWARD": {
+          "count": 15,
+          "percentage": 6.3559322033898304
+        },
+        "MOVE_LEFT": {
+          "count": 211,
+          "percentage": 89.40677966101696
+        },
+        "MOVE_RIGHT": {
+          "count": 9,
+          "percentage": 3.8135593220338984
+        },
+        "TURN_LEFT": {
+          "count": 94,
+          "percentage": 39.83050847457627
+        },
+        "TURN_RIGHT": {
+          "count": 152,
+          "percentage": 64.40677966101696
+        },
+        "ATTACK": {
+          "count": 96,
+          "percentage": 40.67796610169491
+        },
+        "USE": {
+          "count": 189,
+          "percentage": 80.08474576271186
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 73,
+          "percentage": 30.93220338983051
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 12,
+          "percentage": 5.084745762711864
+        },
+        "left_right": {
+          "count": 9,
+          "percentage": 3.8135593220338984
+        },
+        "turn_left_right": {
+          "count": 62,
+          "percentage": 26.271186440677965
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 96,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 115,
+      "attack_with_zero_selected_weapon_ammo": 46,
+      "use_activations": 189,
+      "use_button_down_edges": 38,
+      "weapon_select_activations": 73,
+      "weapon_select_button_down_edges": 49,
+      "weapon_selection_changes": 35,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier3_red_key.wad:MAP01",
+      "seed": 2,
+      "decisions": 189,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 48.0,
+      "keycards": 1,
+      "ammo_remaining": 48.0,
+      "unique_cells": 10,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 5.0,
+        "item": 0.0,
+        "exploration": 4.5,
+        "movement": 0.14233592421125155,
+        "living": -0.18900000000000014,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.06,
+        "total_shaped_reward": 20.39333592421125,
+        "unique_cells_visited": 10.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 171,
+          "percentage": 90.47619047619048
+        },
+        "MOVE_BACKWARD": {
+          "count": 15,
+          "percentage": 7.936507936507937
+        },
+        "MOVE_LEFT": {
+          "count": 175,
+          "percentage": 92.5925925925926
+        },
+        "MOVE_RIGHT": {
+          "count": 6,
+          "percentage": 3.1746031746031744
+        },
+        "TURN_LEFT": {
+          "count": 73,
+          "percentage": 38.62433862433863
+        },
+        "TURN_RIGHT": {
+          "count": 137,
+          "percentage": 72.48677248677248
+        },
+        "ATTACK": {
+          "count": 75,
+          "percentage": 39.682539682539684
+        },
+        "USE": {
+          "count": 152,
+          "percentage": 80.42328042328042
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 60,
+          "percentage": 31.746031746031747
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 15,
+          "percentage": 7.936507936507937
+        },
+        "left_right": {
+          "count": 5,
+          "percentage": 2.6455026455026456
+        },
+        "turn_left_right": {
+          "count": 54,
+          "percentage": 28.571428571428573
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 75,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 109,
+      "attack_with_zero_selected_weapon_ammo": 37,
+      "use_activations": 152,
+      "use_button_down_edges": 29,
+      "weapon_select_activations": 60,
+      "weapon_select_button_down_edges": 38,
+      "weapon_selection_changes": 30,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier3_red_key.wad:MAP01",
+      "seed": 3,
+      "decisions": 111,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 47.0,
+      "keycards": 1,
+      "ammo_remaining": 47.0,
+      "unique_cells": 10,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 5.0,
+        "item": 0.0,
+        "exploration": 4.5,
+        "movement": 0.1951221136517328,
+        "living": -0.11100000000000008,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.08,
+        "total_shaped_reward": 20.504122113651732,
+        "unique_cells_visited": 10.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 97,
+          "percentage": 87.38738738738739
+        },
+        "MOVE_BACKWARD": {
+          "count": 11,
+          "percentage": 9.90990990990991
+        },
+        "MOVE_LEFT": {
+          "count": 97,
+          "percentage": 87.38738738738739
+        },
+        "MOVE_RIGHT": {
+          "count": 8,
+          "percentage": 7.207207207207207
+        },
+        "TURN_LEFT": {
+          "count": 40,
+          "percentage": 36.03603603603604
+        },
+        "TURN_RIGHT": {
+          "count": 80,
+          "percentage": 72.07207207207207
+        },
+        "ATTACK": {
+          "count": 39,
+          "percentage": 35.13513513513514
+        },
+        "USE": {
+          "count": 89,
+          "percentage": 80.18018018018019
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 36,
+          "percentage": 32.432432432432435
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 8,
+          "percentage": 7.207207207207207
+        },
+        "left_right": {
+          "count": 7,
+          "percentage": 6.306306306306307
+        },
+        "turn_left_right": {
+          "count": 31,
+          "percentage": 27.92792792792793
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 39,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 48,
+      "attack_with_zero_selected_weapon_ammo": 13,
+      "use_activations": 89,
+      "use_button_down_edges": 17,
+      "weapon_select_activations": 36,
+      "weapon_select_button_down_edges": 23,
+      "weapon_selection_changes": 16,
+      "failure_mode": "success"
+    },
+    {
+      "map": "maps/training/tier3_red_key.wad:MAP01",
+      "seed": 4,
+      "decisions": 119,
+      "ticks": 0,
+      "raw_return": 1.0,
+      "exit_reached": true,
+      "dead": false,
+      "timeout": false,
+      "termination_reason": "exit",
+      "kills": 0,
+      "damage_taken": 0.0,
+      "initial_health": 100.0,
+      "final_health": 100.0,
+      "final_selected_weapon": 2.0,
+      "final_selected_weapon_ammo": 45.0,
+      "keycards": 1,
+      "ammo_remaining": 45.0,
+      "unique_cells": 10,
+      "doors_opened": null,
+      "reward_components": {
+        "env_raw": 1.0,
+        "exit": 10.0,
+        "death": 0.0,
+        "kill": 0.0,
+        "damage": 0.0,
+        "key": 5.0,
+        "item": 0.0,
+        "exploration": 4.5,
+        "movement": 0.23218331295746486,
+        "living": -0.11900000000000009,
+        "anti_spin": 0.0,
+        "anti_door_spam": -0.06,
+        "total_shaped_reward": 20.553183312957465,
+        "unique_cells_visited": 10.0
+      },
+      "action_activations": {
+        "MOVE_FORWARD": {
+          "count": 108,
+          "percentage": 90.75630252100841
+        },
+        "MOVE_BACKWARD": {
+          "count": 14,
+          "percentage": 11.764705882352942
+        },
+        "MOVE_LEFT": {
+          "count": 105,
+          "percentage": 88.23529411764706
+        },
+        "MOVE_RIGHT": {
+          "count": 9,
+          "percentage": 7.563025210084033
+        },
+        "TURN_LEFT": {
+          "count": 40,
+          "percentage": 33.61344537815126
+        },
+        "TURN_RIGHT": {
+          "count": 78,
+          "percentage": 65.54621848739495
+        },
+        "ATTACK": {
+          "count": 42,
+          "percentage": 35.294117647058826
+        },
+        "USE": {
+          "count": 97,
+          "percentage": 81.5126050420168
+        },
+        "SELECT_NEXT_WEAPON": {
+          "count": 34,
+          "percentage": 28.571428571428573
+        }
+      },
+      "action_conflicts": {
+        "forward_backward": {
+          "count": 13,
+          "percentage": 10.92436974789916
+        },
+        "left_right": {
+          "count": 8,
+          "percentage": 6.722689075630252
+        },
+        "turn_left_right": {
+          "count": 26,
+          "percentage": 21.84873949579832
+        }
+      },
+      "enemy_visible_steps": 0,
+      "enemy_useful_range_steps": 0,
+      "attack_activations": 42,
+      "attack_while_enemy_visible": 0,
+      "attack_while_enemy_visible_percentage": 0.0,
+      "attack_while_enemy_in_useful_range": 0,
+      "attack_while_enemy_in_useful_range_percentage": 0.0,
+      "forward_ray_enemy_steps": 0,
+      "attack_while_forward_ray_enemy": 0,
+      "selected_weapon_ammo_zero_steps": 46,
+      "attack_with_zero_selected_weapon_ammo": 15,
+      "use_activations": 97,
+      "use_button_down_edges": 16,
+      "weapon_select_activations": 34,
+      "weapon_select_button_down_edges": 23,
+      "weapon_selection_changes": 14,
+      "failure_mode": "success"
+    }
+  ],
+  "unavailable_metrics": {
+    "doors_opened": "The privileged state does not expose a door-open counter.",
+    "damage_dealt": "The wrapper does not expose damage dealt; visibility and ATTACK do not prove a hit.",
+    "ammo_remaining": "Reserve ammunition uses the last returned observation, which may precede the terminal tics."
+  }
+}

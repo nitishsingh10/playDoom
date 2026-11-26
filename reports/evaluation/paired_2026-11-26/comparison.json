@@ -1,0 +1,532 @@
+{
+  "status": "descriptive_comparison_not_a_training_budget_matched_ablation",
+  "primary_mode": "stochastic",
+  "baseline_config": {
+    "deterministic_eval": false,
+    "action_threshold": 0.5,
+    "use_rgb": false,
+    "use_depth": false,
+    "hidden_size": 32,
+    "fusion_size": 128
+  },
+  "baseline_training_decisions": null,
+  "candidate_training_decisions": 64,
+  "modes": {
+    "stochastic": {
+      "episodes_per_policy": 15,
+      "total_decisions": {
+        "baseline": 1724,
+        "structured_smoke": 5699
+      },
+      "aggregate": {
+        "baseline": {
+          "exit_rate": 0.6666666666666666,
+          "survival_rate": 0.6666666666666666,
+          "mean_kills": 0,
+          "mean_damage_taken": 35.6,
+          "action_conflicts": {
+            "forward_backward": {
+              "count": 218,
+              "percentage": 12.645011600928074
+            },
+            "left_right": {
+              "count": 170,
+              "percentage": 9.860788863109049
+            },
+            "turn_left_right": {
+              "count": 510,
+              "percentage": 29.582366589327147
+            }
+          }
+        },
+        "structured_smoke": {
+          "exit_rate": 0.0,
+          "survival_rate": 0.6666666666666666,
+          "mean_kills": 0,
+          "mean_damage_taken": 37.6,
+          "action_conflicts": {
+            "forward_backward": {
+              "count": 0,
+              "percentage": 0.0
+            },
+            "left_right": {
+              "count": 0,
+              "percentage": 0.0
+            },
+            "turn_left_right": {
+              "count": 0,
+              "percentage": 0.0
+            }
+          }
+        }
+      },
+      "per_map": {
+        "maps/training/tier1_projectile.wad:MAP01": {
+          "baseline": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 5,
+            "timeouts": 0,
+            "total_decisions": 381,
+            "mean_decisions": 76.2,
+            "mean_damage_taken": 106.8,
+            "mean_final_health": -6.8,
+            "enemy_visible_steps": 326,
+            "attack_while_enemy_visible": 114,
+            "attack_while_enemy_visible_percentage": 34.969325153374236,
+            "enemy_useful_range_steps": 326,
+            "attack_while_enemy_in_useful_range": 114,
+            "weapon_selection_changes": 66,
+            "use_activations": 246,
+            "use_button_down_edges": 86,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 83,
+                "percentage": 21.78477690288714
+              },
+              "left_right": {
+                "count": 73,
+                "percentage": 19.16010498687664
+              },
+              "turn_left_right": {
+                "count": 137,
+                "percentage": 35.958005249343834
+              }
+            }
+          },
+          "structured_smoke": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 5,
+            "timeouts": 0,
+            "total_decisions": 449,
+            "mean_decisions": 89.8,
+            "mean_damage_taken": 112.8,
+            "mean_final_health": -12.8,
+            "enemy_visible_steps": 245,
+            "attack_while_enemy_visible": 114,
+            "attack_while_enemy_visible_percentage": 46.53061224489796,
+            "enemy_useful_range_steps": 245,
+            "attack_while_enemy_in_useful_range": 114,
+            "weapon_selection_changes": 83,
+            "use_activations": 212,
+            "use_button_down_edges": 111,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          }
+        },
+        "maps/training/tier2_door.wad:MAP01": {
+          "baseline": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 5,
+            "deaths": 0,
+            "timeouts": 0,
+            "total_decisions": 576,
+            "mean_decisions": 115.2,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 96,
+            "use_activations": 405,
+            "use_button_down_edges": 122,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 80,
+                "percentage": 13.88888888888889
+              },
+              "left_right": {
+                "count": 63,
+                "percentage": 10.9375
+              },
+              "turn_left_right": {
+                "count": 163,
+                "percentage": 28.29861111111111
+              }
+            }
+          },
+          "structured_smoke": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 0,
+            "timeouts": 5,
+            "total_decisions": 2625,
+            "mean_decisions": 525,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 469,
+            "use_activations": 1219,
+            "use_button_down_edges": 648,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          }
+        },
+        "maps/training/tier3_red_key.wad:MAP01": {
+          "baseline": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 5,
+            "deaths": 0,
+            "timeouts": 0,
+            "total_decisions": 767,
+            "mean_decisions": 153.4,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 108,
+            "use_activations": 621,
+            "use_button_down_edges": 115,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 55,
+                "percentage": 7.170795306388527
+              },
+              "left_right": {
+                "count": 34,
+                "percentage": 4.432855280312907
+              },
+              "turn_left_right": {
+                "count": 210,
+                "percentage": 27.379400260756192
+              }
+            }
+          },
+          "structured_smoke": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 0,
+            "timeouts": 5,
+            "total_decisions": 2625,
+            "mean_decisions": 525,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 471,
+            "use_activations": 1218,
+            "use_button_down_edges": 648,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          }
+        }
+      }
+    },
+    "deterministic": {
+      "episodes_per_policy": 15,
+      "total_decisions": {
+        "baseline": 5541,
+        "structured_smoke": 5707
+      },
+      "aggregate": {
+        "baseline": {
+          "exit_rate": 0.0,
+          "survival_rate": 0.6666666666666666,
+          "mean_kills": 0,
+          "mean_damage_taken": 37.0,
+          "action_conflicts": {
+            "forward_backward": {
+              "count": 0,
+              "percentage": 0.0
+            },
+            "left_right": {
+              "count": 0,
+              "percentage": 0.0
+            },
+            "turn_left_right": {
+              "count": 291,
+              "percentage": 5.251759610178668
+            }
+          }
+        },
+        "structured_smoke": {
+          "exit_rate": 0.0,
+          "survival_rate": 0.6666666666666666,
+          "mean_kills": 0,
+          "mean_damage_taken": 35.2,
+          "action_conflicts": {
+            "forward_backward": {
+              "count": 0,
+              "percentage": 0.0
+            },
+            "left_right": {
+              "count": 0,
+              "percentage": 0.0
+            },
+            "turn_left_right": {
+              "count": 0,
+              "percentage": 0.0
+            }
+          }
+        }
+      },
+      "per_map": {
+        "maps/training/tier1_projectile.wad:MAP01": {
+          "baseline": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 5,
+            "timeouts": 0,
+            "total_decisions": 291,
+            "mean_decisions": 58.2,
+            "mean_damage_taken": 111.0,
+            "mean_final_health": -11.0,
+            "enemy_visible_steps": 291,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": 0.0,
+            "enemy_useful_range_steps": 291,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 0,
+            "use_activations": 291,
+            "use_button_down_edges": 5,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 291,
+                "percentage": 100.0
+              }
+            }
+          },
+          "structured_smoke": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 5,
+            "timeouts": 0,
+            "total_decisions": 457,
+            "mean_decisions": 91.4,
+            "mean_damage_taken": 105.6,
+            "mean_final_health": -5.6,
+            "enemy_visible_steps": 169,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": 0.0,
+            "enemy_useful_range_steps": 169,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 5,
+            "use_activations": 0,
+            "use_button_down_edges": 0,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          }
+        },
+        "maps/training/tier2_door.wad:MAP01": {
+          "baseline": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 0,
+            "timeouts": 5,
+            "total_decisions": 2625,
+            "mean_decisions": 525,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 0,
+            "use_activations": 2625,
+            "use_button_down_edges": 5,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          },
+          "structured_smoke": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 0,
+            "timeouts": 5,
+            "total_decisions": 2625,
+            "mean_decisions": 525,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 5,
+            "use_activations": 0,
+            "use_button_down_edges": 0,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          }
+        },
+        "maps/training/tier3_red_key.wad:MAP01": {
+          "baseline": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 0,
+            "timeouts": 5,
+            "total_decisions": 2625,
+            "mean_decisions": 525,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 0,
+            "use_activations": 2625,
+            "use_button_down_edges": 5,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          },
+          "structured_smoke": {
+            "episodes": 5,
+            "kills": 0,
+            "exits": 0,
+            "deaths": 0,
+            "timeouts": 5,
+            "total_decisions": 2625,
+            "mean_decisions": 525,
+            "mean_damage_taken": 0.0,
+            "mean_final_health": 100.0,
+            "enemy_visible_steps": 0,
+            "attack_while_enemy_visible": 0,
+            "attack_while_enemy_visible_percentage": null,
+            "enemy_useful_range_steps": 0,
+            "attack_while_enemy_in_useful_range": 0,
+            "weapon_selection_changes": 5,
+            "use_activations": 0,
+            "use_button_down_edges": 0,
+            "action_conflicts": {
+              "forward_backward": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "left_right": {
+                "count": 0,
+                "percentage": 0.0
+              },
+              "turn_left_right": {
+                "count": 0,
+                "percentage": 0.0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "checks": {
+    "map_seed_pairs_match": true,
+    "same_initial_health": true,
+    "original_files_unchanged": true,
+    "candidate_rerun_identical_to_previous_results": true
+  }
+}
