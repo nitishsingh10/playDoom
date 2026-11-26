@@ -366,8 +366,8 @@ class RolloutCollector:
 
                     rec = EpisodeRecord(
                         episode_id=self._episode_id,
-                        map_name=getattr(self.env, "map_name", "UNKNOWN"),
-                        seed=None,
+                        map_name=getattr(self.env, "episode_map_spec", None) or getattr(self.env, "map_name", "UNKNOWN"),
+                        seed=getattr(self.env, "current_episode_seed", None),
                         ticks=self._episode_step_count * 4,
                         max_ticks=max_ticks,
                         raw_return=self._episode_raw_return,

@@ -28,6 +28,8 @@ class MapCyclerEnv:
         self.env = None
         self._active_spec = None
         self.map_name = "UNKNOWN"
+        self.episode_map_spec = None
+        self.current_episode_seed = None
 
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         if seed is not None:
@@ -43,6 +45,8 @@ class MapCyclerEnv:
             self._active_spec = spec
         self.map_name = map_name
         episode_seed = int(self.rng.integers(0, 2**31 - 1))
+        self.episode_map_spec = f"{wad}:{map_name}"
+        self.current_episode_seed = episode_seed
         return self.env.reset(seed=episode_seed, options=options)
 
     def step(self, action):

@@ -95,6 +95,16 @@ The v2 variant has only been checked with synthetic inputs, gradients and
 checkpoint round trips. Combat improvement and unseen-layout performance have
 not been demonstrated.
 
+After the VM smoke test, `bash training/run_directional_comparison.sh` launches
+a bounded comparison inside tmux: fresh v1/v2 pairs for seeds 17, 23 and 41,
+64,000 decisions per model, followed by 480 matched evaluation episodes. Shared
+parameters start equal and v2's extra angle weights start at zero; actual initial
+checkpoints are retained. Both arms use the original rewards and PPO settings.
+Outputs include all completed training episodes with actual WADs/engine seeds,
+per-map evaluation records and paired training-seed effects with SD. Nothing is
+promoted. The previously evaluated `two_rooms` fixture is excluded from training;
+it does not constitute a new unseen-layout benchmark.
+
 ### 3. Training & Optimization Pipeline (`training/`)
 * **Custom PPO & GAE (`training/ppo.py`)**:
   * Implements clipped surrogate policy objective, value function loss clipping, and entropy exploration bonus.

@@ -12,12 +12,12 @@ test -s submission/weights/config.json
 mkdir -p training/runs
 
 # Prevent concurrent pilots and refuse to overlap an existing training process.
-exec 9>training/runs/.combat-credit-pilot.lock
+exec 9>training/runs/.doom-training.lock
 if ! flock -n 9; then
     echo "Another combat pilot is running. Attach its tmux session."
     exit 1
 fi
-if pgrep -f 'python[^ ]* .*training\.(train|combat_experiment)( |$)' >/dev/null; then
+if pgrep -f 'python[^ ]* .*training\.(train|combat_experiment|directional_experiment)( |$)' >/dev/null; then
     echo "A training process is already running. Wait for it to finish."
     exit 1
 fi
