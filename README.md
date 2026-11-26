@@ -226,6 +226,21 @@ python -m training.validate_checkpoint training/runs/structured_v1/export
 
 Exports use versioned structured weights and a matching config in a separate experiment directory.
 Preserve existing baseline weights/config until paired gameplay evaluation justifies promotion.
+Select the same inference mode used in the candidate's evaluation explicitly, for example:
+
+```bash
+python -m training.export_checkpoint PATH_TO_TRAINING_CHECKPOINT PATH_TO_NEW_EXPORT/checkpoint.pt --stochastic
+python -m training.check_submission PATH_TO_NEW_EXPORT --mode stochastic --source-checkpoint PATH_TO_TRAINING_CHECKPOINT
+```
+
+This preflight requires weights and config, checks the actual `DoomAgent` loads every exported
+parameter, and checks action parity against the selected training checkpoint without gameplay.
+An empty `submission/weights/` directory activates the development fallback; it does not evaluate
+a trained policy. Before a final Git-based submission, run
+`python -m training.check_submission submission/weights --mode stochastic --require-committed`
+to verify both files exist in the current commit and match the working copies. This does not
+verify that the commit was pushed, or that gameplay quality is sufficient. Default exports
+remain deterministic unless a mode is supplied or saved in the source configuration.
 See [the structured policy experiment report](reports/structured_policy_2026-11-26.md) for the
 action contract, measured smoke results, limitations and reproduction commands.
 

@@ -33,7 +33,9 @@ def _guard_destination(destination: Path) -> None:
         )
 
 
-def export_checkpoint(source: str | Path, destination: str | Path | None = None) -> Path:
+def export_checkpoint(
+    source: str | Path, destination: str | Path | None = None, *, deterministic_eval: bool | None = None,
+) -> Path:
     """Export versioned inference weights and matching config outside the baseline.
 
     Inference contents contain tensors and primitive metadata only, so loading
@@ -74,6 +76,8 @@ def export_checkpoint(source: str | Path, destination: str | Path | None = None)
             raise CheckpointCompatibilityError(f"Checkpoint {key} metadata disagrees with its weights.")
         config_values[key] = inferred.shape[0]
     config_values["architecture_id"] = architecture_id
+    if deterministic_eval is not None:
+        config_values["deterministic_eval"] = deterministic_eval
     model = DoomPolicy(
         hidden_size=config_values["hidden_size"], fusion_size=config_values["fusion_size"],
         architecture_id=architecture_id,
@@ -103,8 +107,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source", help="Resumable checkpoint .pt")
     parser.add_argument("destination", nargs="?", default=str(DEFAULT_EXPORT_PATH))
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--stochastic", dest="deterministic_eval", action="store_false",
+                      help="Export the stochastic inference mode used in sampled evaluation")
+    mode.add_argument("--deterministic", dest="deterministic_eval", action="store_true",
+                      help="Export deterministic structured-distribution modes")
+    parser.set_defaults(deterministic_eval=None)
     args = parser.parse_args(argv)
-    print(export_checkpoint(args.source, args.destination))
+    print(export_checkpoint(args.source, args.destination, deterministic_eval=args.deterministic_eval))
     return 0
 
 
