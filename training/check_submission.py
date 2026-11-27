@@ -39,7 +39,15 @@ def check_committed(paths):
             )
         except (subprocess.CalledProcessError, ValueError) as error:
             raise ValueError(f"File is absent from the current Git commit: {path}") from error
-        if hashlib.sha256(committed).hexdigest() != digest(path):
+        if committed.startswith(b"version https://git-lfs.github.com/spec/v1"):
+            oid_line = next(
+                (ln for ln in committed.decode("utf-8", "replace").splitlines() if ln.startswith("oid sha256:")),
+                None,
+            )
+            committed_digest = oid_line.split(":", 1)[1].strip() if oid_line else ""
+        else:
+            committed_digest = hashlib.sha256(committed).hexdigest()
+        if committed_digest != digest(path):
             raise ValueError(f"File differs from the current Git commit: {path}")
 
 
