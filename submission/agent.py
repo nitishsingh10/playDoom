@@ -124,6 +124,10 @@ class DoomAgent:
                 k: torch.as_tensor(v, device=self.device).unsqueeze(0)
                 for k, v in processed.items()
             }
+            if getattr(self.model, "is_recurrent", False):
+                batch["prev_action"] = torch.as_tensor(
+                    self.edge_tracker.last_action, dtype=torch.float32, device=self.device
+                ).unsqueeze(0)
             logits, _, next_hidden = self.model.step(batch, self.hidden_state)
             self.hidden_state = next_hidden
             distribution = StructuredActionDistribution(logits)

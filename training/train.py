@@ -3,7 +3,7 @@
 Owned by Member 2 (PPO and Optimization Engineer).
 Coordinates:
   - DoomPolicy model (Member 3)
-  - RolloutCollector (Member 4)
+  - RolloutCollector / VecRolloutCollector (Member 4)
   - compute_gae & ppo_update (Member 2)
   - Checkpointing (Member 2)
   - Metrics logging and checkpoint evaluation (Member 4 / Member 1)
@@ -20,9 +20,9 @@ from typing import Any, Dict, Optional
 import torch
 import torch.optim as optim
 
+from submission.checkpoint import SPATIAL_GRU_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURES
 from training.checkpoint import load_checkpoint, save_checkpoint
 from training.ppo import compute_gae, ppo_update
-from submission.checkpoint import STRUCTURED_ARCHITECTURE_ID, STRUCTURED_ARCHITECTURES
 
 
 def _flatten_time_batch(tree: Any) -> Any:
@@ -37,11 +37,9 @@ def _flatten_time_batch(tree: Any) -> Any:
 def default_train_config() -> Dict[str, Any]:
     """Default hyperparameters for PPO training on ViZDoom."""
     return {
-        # Rollout settings
         "rollout_steps": 256,
         "gamma": 0.99,
         "gae_lambda": 0.95,
-        # Optimization settings
         "lr": 3e-4,
         "eps_adam": 1e-5,
         "clip_eps": 0.2,
@@ -50,9 +48,9 @@ def default_train_config() -> Dict[str, Any]:
         "max_grad_norm": 0.5,
         "update_epochs": 4,
         "minibatch_size": 64,
+        "seq_len": 32,
         "clip_vloss": True,
         "normalize_advantages": True,
-        # Loop settings
         "total_updates": 500,
         "checkpoint_interval": 25,
         "eval_interval": 50,
@@ -69,27 +67,13 @@ def train_loop(
     resume_path: Optional[str] = None,
     metrics_logger: Optional[Any] = None,
 ) -> Dict[str, Any]:
-    """Run PPO training loop.
-
-    Args:
-        model: DoomPolicy instance (Member 3).
-        collector: RolloutCollector instance (Member 4) implementing .collect(policy, num_steps).
-        optimizer: PyTorch optimizer (if None, Adam is created with config['lr']).
-        config: Dict of hyperparams.
-        resume_path: Path to checkpoint to resume training from.
-        metrics_logger: Optional logger (Member 4) with .log_metrics(dict, step).
-
-    Returns:
-        Summary dictionary with training results.
-    """
+    """Run PPO training loop."""
     cfg = default_train_config()
     if config is not None:
         cfg.update(config)
 
     device = torch.device(cfg["device"])
     model = model.to(device)
-    # Keep observations/actions and model outputs on one device throughout PPO.
-    # This also avoids CPU/GPU mismatches in structured log-probability updates.
     if hasattr(collector, "device"):
         collector.device = device
 
@@ -101,6 +85,8 @@ def train_loop(
 
     if resume_path and Path(resume_path).exists():
         ckpt_info = load_checkpoint(resume_path, model, optimizer, device=device, restore_rng=True)
+        for pg in optimizer.param_groups:
+            pg["lr"] = cfg["lr"]
         start_update = ckpt_info.get("update", 0) + 1
         global_step = ckpt_info.get("global_step", 0)
         print(f"Resumed from {resume_path} at update {start_update}, global step {global_step}")
@@ -116,27 +102,19 @@ def train_loop(
     for update in range(start_update, total_updates + 1):
         t_update_start = time.time()
 
-        # 1. Collect rollouts using Member 4's collector
-        # Expected return: dict with obs, actions, rewards, dones, values, log_probs, last_value
         rollout_data = collector.collect(model, num_steps=rollout_steps)
 
-        # 2. Extract rollout tensors onto target device
-        rewards = torch.as_tensor(rollout_data["rewards"], device=device, dtype=torch.float32)
-        values = torch.as_tensor(rollout_data["values"], device=device, dtype=torch.float32)
-        dones = torch.as_tensor(rollout_data["dones"], device=device, dtype=torch.float32)
-        last_value = torch.as_tensor(rollout_data["last_value"], device=device, dtype=torch.float32)
-        truncations = (
-            torch.as_tensor(rollout_data["truncations"], device=device, dtype=torch.bool)
-            if "truncations" in rollout_data
-            else None
-        )
-        bootstrap_values = (
-            torch.as_tensor(rollout_data["bootstrap_values"], device=device, dtype=torch.float32)
-            if "bootstrap_values" in rollout_data
-            else None
-        )
+        rewards = rollout_data["rewards"].to(device)
+        values = rollout_data["values"].to(device)
+        dones = rollout_data["dones"].to(device)
+        last_value = rollout_data["last_value"].to(device)
+        truncations = rollout_data.get("truncations")
+        if truncations is not None:
+            truncations = truncations.to(device)
+        bootstrap_values = rollout_data.get("bootstrap_values")
+        if bootstrap_values is not None:
+            bootstrap_values = bootstrap_values.to(device)
 
-        # 3. Compute GAE advantages and target returns
         with torch.no_grad():
             advantages, returns = compute_gae(
                 rewards=rewards,
@@ -149,35 +127,43 @@ def train_loop(
                 bootstrap_values=bootstrap_values,
             )
 
-        # Prepare batch for PPO update
-        # Flatten rollout trajectory [T, B] into batch [N] if batched
-        if rewards.dim() > 1:
-            batch_obs = _flatten_time_batch(rollout_data["obs"])
-            batch_actions = torch.as_tensor(rollout_data["actions"], device=device).flatten(0, 1)
-            batch_old_log_probs = torch.as_tensor(rollout_data["log_probs"], device=device).flatten(0, 1)
-            batch_returns = returns.flatten(0, 1)
-            batch_advantages = advantages.flatten(0, 1)
-            batch_old_values = values.flatten(0, 1)
-            num_transitions = rewards.numel()
+        is_recurrent_batch = (
+            getattr(model, "is_recurrent", False)
+            and hasattr(model, "forward_sequence")
+            and "init_hiddens" in rollout_data
+        )
+        num_transitions = rewards.numel()
+
+        if is_recurrent_batch:
+            batch = {
+                "obs": rollout_data["obs"],
+                "actions": torch.as_tensor(rollout_data["actions"], device=device),
+                "old_log_probs": torch.as_tensor(rollout_data["log_probs"], device=device),
+                "returns": returns,
+                "advantages": advantages,
+                "old_values": values,
+                "dones": dones,
+                "init_hiddens": rollout_data["init_hiddens"].to(device),
+            }
+        elif rewards.dim() > 1:
+            batch = {
+                "obs": _flatten_time_batch(rollout_data["obs"]),
+                "actions": torch.as_tensor(rollout_data["actions"], device=device).flatten(0, 1),
+                "old_log_probs": torch.as_tensor(rollout_data["log_probs"], device=device).flatten(0, 1),
+                "returns": returns.flatten(0, 1),
+                "advantages": advantages.flatten(0, 1),
+                "old_values": values.flatten(0, 1),
+            }
         else:
-            batch_obs = rollout_data["obs"]
-            batch_actions = torch.as_tensor(rollout_data["actions"], device=device)
-            batch_old_log_probs = torch.as_tensor(rollout_data["log_probs"], device=device)
-            batch_returns = returns
-            batch_advantages = advantages
-            batch_old_values = values
-            num_transitions = rewards.shape[0]
+            batch = {
+                "obs": rollout_data["obs"],
+                "actions": torch.as_tensor(rollout_data["actions"], device=device),
+                "old_log_probs": torch.as_tensor(rollout_data["log_probs"], device=device),
+                "returns": returns,
+                "advantages": advantages,
+                "old_values": values,
+            }
 
-        batch = {
-            "obs": batch_obs,
-            "actions": batch_actions,
-            "old_log_probs": batch_old_log_probs,
-            "returns": batch_returns,
-            "advantages": batch_advantages,
-            "old_values": batch_old_values,
-        }
-
-        # 4. Perform PPO update
         metrics = ppo_update(model, optimizer, batch, cfg)
 
         global_step += num_transitions
@@ -192,20 +178,25 @@ def train_loop(
         if metrics_logger is not None:
             metrics_logger.log_metrics(metrics, step=global_step)
 
-        # Periodic logging to stdout
-        if update % max(1, (total_updates // 20)) == 0 or update == 1:
+        if update % max(1, (total_updates // 20)) == 0 or update == 1 or update == total_updates:
+            ep_str = ""
+            if metrics_logger is not None and getattr(metrics_logger, "episodes", None):
+                recent = metrics_logger.episodes[-20:]
+                ex_rate = sum(1.0 for e in recent if e.exit_reached) / len(recent)
+                kills = sum(e.kills for e in recent) / len(recent)
+                ret = sum(e.shaped_return for e in recent) / len(recent)
+                ep_str = f" | EpRet={ret:.2f} Exit={ex_rate:.0%} Kills={kills:.2f}"
             print(
                 f"[Update {update}/{total_updates}] Step={global_step} "
                 f"Reward={metrics['mean_reward']:.3f} PLoss={metrics['policy_loss']:.4f} "
                 f"VLoss={metrics['value_loss']:.4f} Ent={metrics['entropy']:.3f} "
-                f"KL={metrics['approx_kl']:.4f} FPS={fps:.1f}"
+                f"KL={metrics['approx_kl']:.4f} FPS={fps:.1f}{ep_str}",
+                flush=True,
             )
 
-        # 5. Periodic Checkpoint save
         if update % cfg["checkpoint_interval"] == 0 or update == total_updates:
-            ckpt_path = save_dir / f"checkpoint_{update}.pt"
-            save_checkpoint(
-                path=ckpt_path,
+            ckpt_path = save_checkpoint(
+                path=save_dir / f"checkpoint_{update}.pt",
                 model=model,
                 optimizer=optimizer,
                 update=update,
@@ -213,7 +204,6 @@ def train_loop(
                 config=cfg,
                 extra=metrics,
             )
-            # Maintain latest pointer
             save_checkpoint(
                 path=save_dir / "checkpoint_latest.pt",
                 model=model,
@@ -232,20 +222,33 @@ def train_loop(
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="PPO training runner for DoomPolicy")
     parser.add_argument("--updates", type=int, default=50, help="Number of PPO updates")
-    parser.add_argument("--rollout-steps", type=int, default=128, help="Steps per rollout")
+    parser.add_argument("--rollout-steps", type=int, default=128, help="Steps per rollout per env")
     parser.add_argument("--minibatch-size", type=int, default=64)
+    parser.add_argument("--seq-len", type=int, default=32, help="Sequence chunk length for recurrent PPO")
     parser.add_argument("--epochs", type=int, default=4)
     parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
+    parser.add_argument("--ent-coef", type=float, default=0.01, help="Entropy bonus coefficient")
+    parser.add_argument("--num-envs", type=int, default=1, help="Number of parallel ViZDoom workers")
+    parser.add_argument("--checkpoint-interval", type=int, default=25)
+    parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--wad", action="append", default=None, help="Training WAD; repeat to cycle among maps")
+    parser.add_argument("--curriculum", action="store_true", help="Use full multi-tier procedural + synthetic map suite")
+    parser.add_argument("--include-freedoom", action="store_true", help="Include Freedoom2 MAP01-MAP05 in curriculum")
+    parser.add_argument("--random-map-prob", type=float, default=0.0, help="Probability of generating a fresh random UDMF map per reset")
     parser.add_argument("--map", type=str, default="MAP01")
     parser.add_argument("--episode-ticks", type=int, default=2100)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--save-dir", type=str, default=None)
     parser.add_argument("--log-dir", type=str, default=None)
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume")
-    parser.add_argument("--architecture", choices=sorted(STRUCTURED_ARCHITECTURES), default=STRUCTURED_ARCHITECTURE_ID,
-                        help="Explicit model variant; v1 remains default. Resume requires the same variant.")
+    parser.add_argument("--hidden-size", type=int, default=None)
+    parser.add_argument("--fusion-size", type=int, default=128)
+    parser.add_argument(
+        "--architecture",
+        choices=sorted(STRUCTURED_ARCHITECTURES),
+        default=STRUCTURED_ARCHITECTURE_ID,
+        help="Explicit model variant.",
+    )
     args = parser.parse_args(argv)
     run_root = Path("training/runs") / args.architecture.removeprefix("doom_")
     args.save_dir = args.save_dir or str(run_root / "checkpoints")
@@ -253,10 +256,10 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     import numpy as np
     from submission.model import DoomPolicy
-    from training.envs import MapCyclerEnv, default_training_maps
+    from training.envs import MapCyclerEnv, SubprocVecEnv, default_curriculum_maps, default_training_maps
     from training.metrics import MetricsLogger
     from training.rewards import RewardShaper
-    from training.rollout import RolloutCollector
+    from training.rollout import RolloutCollector, VecRolloutCollector
 
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -265,31 +268,52 @@ def main(argv: Optional[list[str]] = None) -> int:
         torch.cuda.manual_seed_all(args.seed)
     torch.set_num_threads(1)
 
-    maps = [(wad, args.map) for wad in args.wad] if args.wad else default_training_maps()
-    env = MapCyclerEnv(maps, episode_ticks=args.episode_ticks, seed=args.seed)
+    if args.wad:
+        maps = [(wad, args.map) for wad in args.wad]
+    elif args.curriculum:
+        maps = default_curriculum_maps(include_freedoom=args.include_freedoom)
+    else:
+        maps = default_training_maps()
+
     logger = MetricsLogger(log_dir=args.log_dir)
-    collector = RolloutCollector(
-        env,
-        shaper=RewardShaper(),
-        metrics_logger=logger,
-        device=args.device,
-        seed=args.seed,
-    )
+    if args.num_envs > 1:
+        env = SubprocVecEnv(
+            maps,
+            num_envs=args.num_envs,
+            episode_ticks=args.episode_ticks,
+            seed=args.seed,
+            random_map_prob=args.random_map_prob,
+        )
+        collector = VecRolloutCollector(env, shaper_factory=RewardShaper, metrics_logger=logger, device=args.device)
+    else:
+        env = MapCyclerEnv(
+            maps,
+            episode_ticks=args.episode_ticks,
+            seed=args.seed,
+            random_map_prob=args.random_map_prob,
+        )
+        collector = RolloutCollector(env, shaper=RewardShaper(), metrics_logger=logger, device=args.device, seed=args.seed)
+
     config = default_train_config()
     config.update({
         "total_updates": args.updates,
         "rollout_steps": args.rollout_steps,
         "minibatch_size": args.minibatch_size,
+        "seq_len": args.seq_len,
         "update_epochs": args.epochs,
         "lr": args.lr,
+        "ent_coef": args.ent_coef,
+        "checkpoint_interval": args.checkpoint_interval,
         "device": args.device,
         "save_dir": args.save_dir,
     })
+    policy = DoomPolicy(
+        hidden_size=args.hidden_size,
+        fusion_size=args.fusion_size,
+        architecture_id=args.architecture,
+    )
     try:
-        summary = train_loop(
-            DoomPolicy(architecture_id=args.architecture), collector, config=config,
-            resume_path=args.resume, metrics_logger=logger
-        )
+        summary = train_loop(policy, collector, config=config, resume_path=args.resume, metrics_logger=logger)
         logger.save_json("training_metrics.json")
         print(f"Training summary: {summary}")
         return 0

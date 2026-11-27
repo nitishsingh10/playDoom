@@ -1,0 +1,9 @@
+{
+  "architecture_id": "doom_spatial_gru_v3",
+  "use_rgb": false,
+  "use_depth": false,
+  "deterministic_eval": false,
+  "action_threshold": 0.5,
+  "hidden_size": 64,
+  "fusion_size": 128
+}

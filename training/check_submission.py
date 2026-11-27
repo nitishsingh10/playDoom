@@ -100,10 +100,10 @@ def check_export(weights_dir, *, mode, source_checkpoint=None, require_committed
             raise ValueError("Export parameters do not match the selected training checkpoint")
         for enemy in (False, True):
             observation = probe_observation(enemy)
-            agent.reset()
             with torch.inference_mode():
                 logits, _, _ = reference(observation)
             for seed in (0, 17, 109):
+                agent.reset()
                 torch.manual_seed(seed)
                 distribution = StructuredActionDistribution(logits)
                 expected = distribution.mode() if expected_deterministic else distribution.sample()

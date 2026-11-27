@@ -195,11 +195,16 @@ def evaluate_checkpoint(
                 raw_return = 0.0
                 done = False
                 visited_cells = set()
+                hidden_state = model.init_hidden(batch_size=1, device=device) if hasattr(model, "init_hidden") else None
+                prev_action = np.zeros(9, dtype=np.float32)
                 while not done:
                     encoded = encoder(observation)
+                    if getattr(model, "is_recurrent", False):
+                        encoded["prev_action"] = torch.as_tensor(prev_action, dtype=torch.float32, device=device).unsqueeze(0)
                     with torch.inference_mode():
-                        logits, _, _ = model(encoded)
+                        logits, _, hidden_state = model.step(encoded, hidden_state) if hasattr(model, "step") else model(encoded)
                         action = _choose_action(logits, legacy_baseline=legacy_baseline, stochastic=stochastic, action_threshold=action_threshold)
+                    prev_action = action.astype(np.float32)
                     diagnostics.observe_action(observation, action)
                     observation, reward, terminated, truncated, info = env.step(action)
                     raw_return += float(reward)

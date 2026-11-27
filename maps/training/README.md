@@ -25,3 +25,13 @@ uv run python -m training.train --wad maps/training/tier2_door.wad --map MAP01 \
 The included maps are intentionally small fixtures, not a substitute for a broader varied
 curriculum or held-out evaluation set. Add licensed maps or procedural variants before final
 submission and record their source and license here.
+
+## Procedural Multi-Room Curriculum (`proc_*.wad`)
+
+Generated directly by `training/mapgen.py` (original project UDMF WADs using Freedoom2 textures/DoomEdNums, no external downloads or third-party WADs).
+- `proc_t1_*.wad`: Tier 1 combat & survival arenas with pillars, Imps, Zombiemen, ShotgunGuys, health/shotgun pickups, and exits.
+- `proc_t2_*.wad`: Tier 2 multi-room exploration maps with 90-degree turns, branching rooms, regular doors, enemies, and exits.
+- `proc_t3_*.wad`: Tier 3 long-horizon progression maps requiring branch exploration for Red/Blue/Yellow keycards and backtracking to locked doors.
+- `proc_t4_*.wad`: Tier 4 gauntlet maps combining combat, multiple doors, keycards, locked doors, and pickups.
+
+Held-out validation maps are generated separately into `maps/heldout/` (`heldout_*.wad`) with disjoint layouts and are never included in training.
