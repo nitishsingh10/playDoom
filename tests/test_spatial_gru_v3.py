@@ -222,3 +222,102 @@ def test_reward_shaper_door_reopen_on_key_and_stagnation():
     for idx in range(4):
         _, cs = shaper.step(s4, s4, np.zeros(9, dtype=np.int8))
     assert cs["stagnation"] == pytest.approx(-0.1)
+
+
+def test_v4_depth_2layer_gru_sequence_parity_and_export(tmp_path):
+    from submission.checkpoint import SPATIAL_DEPTH_GRU_ARCHITECTURE_ID
+
+    torch.manual_seed(0)
+    policy = DoomPolicy(architecture_id=SPATIAL_DEPTH_GRU_ARCHITECTURE_ID).eval()
+    assert policy.use_depth and policy.is_recurrent and policy.gru_layers == 2
+    encoder = ObservationEncoder(include_depth=True)
+    B, T = 2, 5
+    dones = torch.zeros(B, T)
+    dones[1, 3] = 1.0
+
+    step_obs_list = []
+    for t in range(T):
+        raw = _obs(3)
+        raw["depth"] = np.full((120, 160), 20 * (t + 1), dtype=np.uint8)
+        batch = {
+            "depth": np.stack([raw["depth"] for _ in range(B)]),
+            "vitals": np.stack([raw["vitals"] for _ in range(B)]),
+            "rays": {
+                "distance": np.stack([raw["rays"]["distance"] for _ in range(B)]),
+                "hit_type": np.stack([raw["rays"]["hit_type"] for _ in range(B)]),
+            },
+            "visible_entities": {
+                "features": np.stack([raw["visible_entities"]["features"] for _ in range(B)]),
+                "entity_type": np.stack([raw["visible_entities"]["entity_type"] for _ in range(B)]),
+                "mask": np.stack([raw["visible_entities"]["mask"] for _ in range(B)]),
+            },
+        }
+        enc = encoder(batch)
+        enc["prev_action"] = torch.zeros(B, 9)
+        step_obs_list.append(enc)
+
+    h = policy.init_hidden(batch_size=B, device="cpu")
+    assert h.shape == (2, B, 256)
+    step_logits, step_vals = [], []
+    with torch.inference_mode():
+        for t in range(T):
+            l_t, v_t, h = policy.step(step_obs_list[t], h)
+            step_logits.append(l_t)
+            step_vals.append(v_t)
+            h = h * (1.0 - dones[:, t]).view(1, B, 1)
+
+        seq_obs = {
+            k: torch.stack([step_obs_list[t][k] for t in range(T)], dim=1)
+            for k in step_obs_list[0]
+        }
+        seq_logits, seq_vals, seq_h = policy.forward_sequence(seq_obs, dones, policy.init_hidden(B, "cpu"))
+
+    assert torch.allclose(torch.stack(step_logits, dim=1), seq_logits, atol=1e-5)
+    assert torch.allclose(torch.stack(step_vals, dim=1), seq_vals, atol=1e-5)
+    assert torch.allclose(h, seq_h, atol=1e-5)
+
+    ckpt = save_checkpoint(tmp_path / "v4_train.pt", policy, config={"deterministic_eval": False})
+    exported = export_checkpoint(ckpt, tmp_path / "v4_export" / "checkpoint.pt", deterministic_eval=False)
+    res = check_export(exported.parent, mode="stochastic", source_checkpoint=ckpt)
+    assert res["architecture_id"] == SPATIAL_DEPTH_GRU_ARCHITECTURE_ID
+
+    agent = DoomAgent(doom_spaces.observation_space(), doom_spaces.action_space(), "cpu", weights_dir=exported.parent)
+    assert agent.config.use_depth and agent.model.use_depth
+    act = agent.act(_obs(1))
+    assert act.shape == (9,)
+
+
+def test_v4_vec_recurrent_ppo_smoke(tmp_path):
+    from submission.checkpoint import SPATIAL_DEPTH_GRU_ARCHITECTURE_ID
+
+    vec = SubprocVecEnv(
+        [("maps/training/tier2_door.wad", "MAP01")],
+        num_envs=2,
+        episode_ticks=80,
+        seed=7,
+        render_buffers=True,
+    )
+    try:
+        collector = VecRolloutCollector(vec, device="cpu")
+        policy = DoomPolicy(hidden_size=48, fusion_size=64, architecture_id=SPATIAL_DEPTH_GRU_ARCHITECTURE_ID)
+        opt = optim.Adam(policy.parameters(), lr=3e-4)
+        batch = collector.collect(policy, num_steps=16)
+        assert batch["init_hiddens"].shape == (16, 2, 2, 64)
+        assert batch["obs"]["depth"].shape == (16, 2, 15, 20)
+        adv, ret = compute_gae(
+            batch["rewards"], batch["values"], batch["dones"], batch["last_value"],
+            truncations=batch["truncations"], bootstrap_values=batch["bootstrap_values"],
+        )
+        metrics = ppo_update(policy, opt, {
+            "obs": batch["obs"],
+            "actions": batch["actions"],
+            "old_log_probs": batch["log_probs"],
+            "returns": ret,
+            "advantages": adv,
+            "old_values": batch["values"],
+            "dones": batch["dones"],
+            "init_hiddens": batch["init_hiddens"],
+        }, {"seq_len": 8, "minibatch_size": 16, "update_epochs": 2})
+        assert np.isfinite(metrics["policy_loss"]) and np.isfinite(metrics["value_loss"])
+    finally:
+        vec.close()

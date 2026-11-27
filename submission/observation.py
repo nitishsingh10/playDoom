@@ -18,8 +18,9 @@ class ObservationEncoder:
     batches of observations are both accepted.
     """
 
-    def __init__(self, device: str | torch.device | None = None):
+    def __init__(self, device: str | torch.device | None = None, *, include_depth: bool = False):
         self.device = torch.device(device) if device is not None else None
+        self.include_depth = bool(include_depth)
 
     def _tensor(self, value, *, dtype: torch.dtype) -> torch.Tensor:
         return torch.as_tensor(value, dtype=dtype, device=self.device)
@@ -100,10 +101,19 @@ class ObservationEncoder:
         vitals[..., 8:14] = vitals[..., 8:14].clamp(0.0, 1.0)
         vitals[..., 14:17] = (vitals[..., 14:17] / 20.0).clamp(-1.0, 1.0)
 
-        return {
+        out = {
             "rays": ray_features,
             "entity_features": normalized_entities,
             "entity_type": entity_type_one_hot,
             "entity_mask": entity_mask,
             "vitals": vitals,
         }
+        if self.include_depth and "depth" in observation and observation["depth"] is not None:
+            depth = self._tensor(observation["depth"], dtype=torch.float32)
+            depth = self._batch(depth, 2, "depth")
+            depth = torch.nan_to_num(depth, nan=0.0, posinf=255.0, neginf=0.0)
+            if depth.shape[-2:] == (doom_spaces.SCREEN_HEIGHT, doom_spaces.SCREEN_WIDTH):
+                depth = depth.clamp(0.0, 255.0) / 255.0
+                depth = F.avg_pool2d(depth.unsqueeze(1), kernel_size=8, stride=8).squeeze(1)
+            out["depth"] = depth
+        return out

@@ -17,11 +17,13 @@ CHECKPOINT_VERSION = 1
 STRUCTURED_ARCHITECTURE_ID = "doom_structured_v1"
 DIRECTIONAL_ARCHITECTURE_ID = "doom_structured_ray_v2"
 SPATIAL_GRU_ARCHITECTURE_ID = "doom_spatial_gru_v3"
+SPATIAL_DEPTH_GRU_ARCHITECTURE_ID = "doom_spatial_gru_v4"
 LEGACY_ARCHITECTURE_ID = "doom_bernoulli_v1"
 STRUCTURED_ARCHITECTURES = frozenset({
     STRUCTURED_ARCHITECTURE_ID,
     DIRECTIONAL_ARCHITECTURE_ID,
     SPATIAL_GRU_ARCHITECTURE_ID,
+    SPATIAL_DEPTH_GRU_ARCHITECTURE_ID,
 })
 SUPPORTED_ARCHITECTURES = STRUCTURED_ARCHITECTURES | {LEGACY_ARCHITECTURE_ID}
 
@@ -44,6 +46,8 @@ def _architecture_from_weights(state: Mapping[str, torch.Tensor]) -> str | None:
     actor = state.get("actor.weight")
     if actor is None or actor.ndim != 2:
         return None
+    if actor.shape[0] == 12 and "depth_cnn.0.weight" in state and "gru.weight_ih_l0" in state:
+        return SPATIAL_DEPTH_GRU_ARCHITECTURE_ID
     if actor.shape[0] == 12 and "ray_conv.0.weight" in state and "gru.weight_ih_l0" in state:
         return SPATIAL_GRU_ARCHITECTURE_ID
     rays = state.get("ray_encoder.0.weight")

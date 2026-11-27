@@ -29,6 +29,7 @@ class MapCyclerEnv:
         episodes_per_map: int = 1,
         random_map_prob: float = 0.0,
         random_tier_probs: tuple[float, float, float, float] = (0.10, 0.25, 0.35, 0.30),
+        render_buffers: bool = False,
     ):
         self.maps = [(str(Path(wad)), map_name.upper()) for wad, map_name in maps]
         if not self.maps:
@@ -37,6 +38,7 @@ class MapCyclerEnv:
         self.episodes_per_map = max(1, int(episodes_per_map))
         self.random_map_prob = float(random_map_prob)
         self.random_tier_probs = tuple(float(x) for x in random_tier_probs)
+        self.render_buffers = bool(render_buffers)
         self._episodes_on_current_map = 0
         self.rng = np.random.default_rng(seed)
         self.observation_space = doom_spaces.observation_space()
@@ -68,7 +70,7 @@ class MapCyclerEnv:
                 spec = (wad, map_name)
                 label = f"random:{spec_obj.name}"
                 self._active_spec = None  # Force fresh DoomEnv load if another random map follows
-                self.env = make_env(wad, map_name, episode_ticks=self.episode_ticks, render_buffers=False)
+                self.env = make_env(wad, map_name, episode_ticks=self.episode_ticks, render_buffers=self.render_buffers)
                 self._active_spec = spec
                 self._label = label
             else:
@@ -79,7 +81,7 @@ class MapCyclerEnv:
                     self.env.close()
                     self.env = None
                 if self.env is None:
-                    self.env = make_env(wad, map_name, episode_ticks=self.episode_ticks, render_buffers=False)
+                    self.env = make_env(wad, map_name, episode_ticks=self.episode_ticks, render_buffers=self.render_buffers)
                     self._active_spec = spec
                 self._label = f"{wad}:{map_name}"
         self._episodes_on_current_map += 1
@@ -122,6 +124,7 @@ def _vec_worker(
     episode_ticks: int,
     seed: int,
     random_map_prob: float,
+    render_buffers: bool = False,
 ) -> None:
     parent_remote.close()
     env = MapCyclerEnv(
@@ -130,6 +133,7 @@ def _vec_worker(
         seed=seed,
         episodes_per_map=2 if random_map_prob > 0 else 3,
         random_map_prob=random_map_prob,
+        render_buffers=render_buffers,
     )
     try:
         while True:
@@ -190,6 +194,7 @@ class SubprocVecEnv:
         episode_ticks: int = 2100,
         seed: int = 0,
         random_map_prob: float = 0.0,
+        render_buffers: bool = False,
     ):
         self.maps = [(str(Path(wad)), map_name.upper()) for wad, map_name in maps]
         if num_envs < 1:
@@ -209,7 +214,7 @@ class SubprocVecEnv:
             parent_conn, child_conn = ctx.Pipe()
             proc = ctx.Process(
                 target=_vec_worker,
-                args=(child_conn, parent_conn, self.maps, self.episode_ticks, int(seed) + idx * 1009, self.random_map_prob),
+                args=(child_conn, parent_conn, self.maps, self.episode_ticks, int(seed) + idx * 1009, self.random_map_prob, bool(render_buffers)),
                 daemon=True,
             )
             proc.start()

@@ -23,7 +23,13 @@ from training.ppo import sample_actions
 from training.rewards import RewardConfig, RewardShaper
 
 
-def collate_observations(obs_list: List[Dict[str, Any]], device: torch.device) -> Dict[str, Any]:
+def collate_observations(
+    obs_list: List[Dict[str, Any]],
+    device: torch.device,
+    *,
+    include_rgb: bool = True,
+    downsample_depth: bool = False,
+) -> Dict[str, Any]:
     """Collate a sequence of T observation dictionaries into a batched dictionary of PyTorch tensors."""
     T = len(obs_list)
     if T == 0:
@@ -57,14 +63,19 @@ def collate_observations(obs_list: List[Dict[str, Any]], device: torch.device) -
         "visible_entities": visible_entities,
     }
 
-    if "rgb" in sample and sample["rgb"] is not None:
+    if include_rgb and "rgb" in sample and sample["rgb"] is not None:
         collated["rgb"] = torch.as_tensor(
             np.stack([o["rgb"] for o in obs_list]), dtype=torch.uint8, device=device
         )
     if "depth" in sample and sample["depth"] is not None:
-        collated["depth"] = torch.as_tensor(
-            np.stack([o["depth"] for o in obs_list]), dtype=torch.uint8, device=device
-        )
+        if downsample_depth:
+            import torch.nn.functional as F
+            d = torch.as_tensor(np.stack([o["depth"] for o in obs_list]), dtype=torch.float32, device=device) / 255.0
+            collated["depth"] = F.avg_pool2d(d.unsqueeze(1), kernel_size=8, stride=8).squeeze(1)
+        else:
+            collated["depth"] = torch.as_tensor(
+                np.stack([o["depth"] for o in obs_list]), dtype=torch.uint8, device=device
+            )
 
     return collated
 
@@ -259,7 +270,7 @@ class RolloutCollector:
         hidden_state: Optional[torch.Tensor] = None,
         prev_action: Optional[np.ndarray] = None,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
-        batched_obs = collate_observations([obs], device=self.device)
+        batched_obs = collate_observations([obs], device=self.device, include_rgb=not bool(getattr(policy, "use_depth", False)), downsample_depth=bool(getattr(policy, "use_depth", False)))
         if getattr(policy, "is_recurrent", False):
             pa = self._prev_action if prev_action is None else prev_action
             batched_obs["prev_action"] = torch.as_tensor(pa, dtype=torch.float32, device=self.device).unsqueeze(0)
@@ -321,7 +332,7 @@ class RolloutCollector:
             obs_buffer.append(obs)
             if is_recurrent:
                 prev_action_buffer.append(self._prev_action.copy())
-                hidden_buffer.append(self._hidden_state.squeeze(0).squeeze(0).detach().clone())
+                hidden_buffer.append((self._hidden_state.squeeze(0).squeeze(0) if self._hidden_state.shape[0] == 1 else self._hidden_state.squeeze(1)).detach().clone())
 
             action_tensor, val_tensor, log_prob_tensor, next_hidden = self._step_policy(
                 policy, obs, hidden_state=self._hidden_state, prev_action=self._prev_action
@@ -424,7 +435,7 @@ class RolloutCollector:
                 policy, self._current_obs, hidden_state=self._hidden_state, prev_action=self._prev_action
             )
 
-        collated_obs = collate_observations(obs_buffer, device=self.device)
+        collated_obs = collate_observations(obs_buffer, device=self.device, include_rgb=not bool(getattr(policy, "use_depth", False)), downsample_depth=bool(getattr(policy, "use_depth", False)))
         if is_recurrent:
             collated_obs["prev_action"] = torch.as_tensor(
                 np.stack(prev_action_buffer), dtype=torch.float32, device=self.device
@@ -508,12 +519,12 @@ class VecRolloutCollector:
         bootstrap_value_buffer: List[torch.Tensor] = []
 
         for _ in range(num_steps):
-            batched_obs = collate_observations(self._obs_list, device=self.device)
+            batched_obs = collate_observations(self._obs_list, device=self.device, include_rgb=not bool(getattr(policy, "use_depth", False)), downsample_depth=bool(getattr(policy, "use_depth", False)))
             if is_recurrent:
                 batched_obs["prev_action"] = torch.as_tensor(
                     self._prev_actions, dtype=torch.float32, device=self.device
                 )
-                hidden_buffer.append(self._hidden_state.squeeze(0).detach().clone())
+                hidden_buffer.append((self._hidden_state.squeeze(0) if self._hidden_state.shape[0] == 1 else self._hidden_state.permute(1, 0, 2)).detach().clone())
             step_obs_buffers.append(batched_obs)
 
             with torch.no_grad():
@@ -588,7 +599,7 @@ class VecRolloutCollector:
                     self._prev_actions[i] = actions_np[i].astype(np.float32)
 
             if trunc_indices:
-                trunc_batch = collate_observations(trunc_obs_list, device=self.device)
+                trunc_batch = collate_observations(trunc_obs_list, device=self.device, include_rgb=False, downsample_depth=bool(getattr(policy, "use_depth", False)))
                 trunc_h = None
                 if is_recurrent:
                     trunc_batch["prev_action"] = torch.as_tensor(
@@ -617,7 +628,7 @@ class VecRolloutCollector:
             bootstrap_value_buffer.append(torch.as_tensor(step_bootstraps, dtype=torch.float32, device=self.device))
 
         # Bootstrap last_value from self._obs_list
-        last_obs_batch = collate_observations(self._obs_list, device=self.device)
+        last_obs_batch = collate_observations(self._obs_list, device=self.device, include_rgb=False, downsample_depth=bool(getattr(policy, "use_depth", False)))
         if is_recurrent:
             last_obs_batch["prev_action"] = torch.as_tensor(
                 self._prev_actions, dtype=torch.float32, device=self.device

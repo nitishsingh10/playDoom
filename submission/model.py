@@ -13,6 +13,7 @@ from doom_env import spaces as doom_spaces
 from submission.actions import ACTION_DIM, NUM_ACTION_LOGITS
 from submission.checkpoint import (
     DIRECTIONAL_ARCHITECTURE_ID,
+    SPATIAL_DEPTH_GRU_ARCHITECTURE_ID,
     SPATIAL_GRU_ARCHITECTURE_ID,
     STRUCTURED_ARCHITECTURE_ID,
     STRUCTURED_ARCHITECTURES,
@@ -27,6 +28,13 @@ def _init_linear(layer: nn.Linear, gain: float = math.sqrt(2.0), bias_const: flo
     return layer
 
 
+def _init_conv(layer: nn.Conv1d | nn.Conv2d, gain: float = math.sqrt(2.0)) -> nn.Module:
+    nn.init.orthogonal_(layer.weight, gain=gain)
+    if layer.bias is not None:
+        nn.init.constant_(layer.bias, 0.0)
+    return layer
+
+
 class DoomPolicy(nn.Module):
     """Spatial actor-critic with 12 structured logits and a value head.
 
@@ -34,30 +42,44 @@ class DoomPolicy(nn.Module):
     - ``doom_structured_v1``: stateless MLP baseline
     - ``doom_structured_ray_v2``: stateless MLP with ray angles
     - ``doom_spatial_gru_v3``: circular 1D ray convolutions + 8-sector pooling,
-      entity masked attention + max pooling, previous-action context, and GRU memory
+      entity masked attention + max pooling, previous-action context, and 1-layer GRU
+    - ``doom_spatial_gru_v4``: deeper circular ray convs + 16-sector pooling,
+      downsampled depth CNN, 2-head masked entity attention, and 2-layer residual GRU
     """
 
     def __init__(
         self,
         hidden_size: int | None = None,
-        fusion_size: int = 128,
+        fusion_size: int | None = None,
         architecture_id: str = STRUCTURED_ARCHITECTURE_ID,
     ):
         super().__init__()
         if architecture_id not in SUPPORTED_ARCHITECTURES:
             raise ValueError(f"Unknown policy architecture: {architecture_id!r}")
         if hidden_size is None:
-            hidden_size = 64 if architecture_id == SPATIAL_GRU_ARCHITECTURE_ID else 32
+            if architecture_id == SPATIAL_DEPTH_GRU_ARCHITECTURE_ID:
+                hidden_size = 96
+            elif architecture_id == SPATIAL_GRU_ARCHITECTURE_ID:
+                hidden_size = 64
+            else:
+                hidden_size = 32
+        if fusion_size is None:
+            fusion_size = 256 if architecture_id == SPATIAL_DEPTH_GRU_ARCHITECTURE_ID else 128
+
         self.architecture_id = architecture_id
         self.hidden_size = int(hidden_size)
         self.fusion_size = int(fusion_size)
-        self.is_recurrent = architecture_id == SPATIAL_GRU_ARCHITECTURE_ID
-        self.observation_encoder = ObservationEncoder()
+        self.use_depth = architecture_id == SPATIAL_DEPTH_GRU_ARCHITECTURE_ID
+        self.is_recurrent = architecture_id in (SPATIAL_GRU_ARCHITECTURE_ID, SPATIAL_DEPTH_GRU_ARCHITECTURE_ID)
+        self.gru_layers = 2 if self.use_depth else 1
+        self.observation_encoder = ObservationEncoder(include_depth=self.use_depth)
 
-        directional = architecture_id in (DIRECTIONAL_ARCHITECTURE_ID, SPATIAL_GRU_ARCHITECTURE_ID)
+        directional = architecture_id in (
+            DIRECTIONAL_ARCHITECTURE_ID,
+            SPATIAL_GRU_ARCHITECTURE_ID,
+            SPATIAL_DEPTH_GRU_ARCHITECTURE_ID,
+        )
         if directional:
-            # Match Sensors: ray k points at heading + k*2*pi/64. Positive
-            # angles turn left; channels are sin/cos, as for visible entities.
             angles = torch.arange(doom_spaces.NUM_RAYS, dtype=torch.float64) * (math.tau / doom_spaces.NUM_RAYS)
             self.register_buffer(
                 "ray_directions",
@@ -69,14 +91,79 @@ class DoomPolicy(nn.Module):
         entity_input_size = len(doom_spaces.ENTITY_FEATURES) + len(doom_spaces.ENTITY_TYPES)
         output_size = NUM_ACTION_LOGITS if architecture_id in STRUCTURED_ARCHITECTURES else len(doom_spaces.BUTTONS)
 
-        if self.is_recurrent:
+        if self.use_depth:
+            self.ray_conv = nn.Sequential(
+                _init_conv(nn.Conv1d(ray_in_channels, self.hidden_size, kernel_size=5, padding=2, padding_mode="circular")),
+                nn.ReLU(),
+                _init_conv(nn.Conv1d(self.hidden_size, self.hidden_size, kernel_size=5, padding=2, padding_mode="circular")),
+                nn.ReLU(),
+                _init_conv(nn.Conv1d(self.hidden_size, self.hidden_size, kernel_size=5, padding=2, padding_mode="circular")),
+                nn.ReLU(),
+            )
+            # 16 angular sectors (4 rays each = 22.5 deg) x (mean + max) = 32 * hidden_size
+            self.ray_proj = nn.Sequential(
+                _init_linear(nn.Linear(self.hidden_size * 32, self.fusion_size)),
+                nn.LayerNorm(self.fusion_size),
+                nn.ReLU(),
+            )
+            self.depth_cnn = nn.Sequential(
+                _init_conv(nn.Conv2d(1, 24, kernel_size=3, padding=1)),
+                nn.ReLU(),
+                _init_conv(nn.Conv2d(24, 32, kernel_size=3, stride=2, padding=1)),
+                nn.ReLU(),
+                _init_conv(nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1)),
+                nn.ReLU(),
+            )
+            self.depth_proj = nn.Sequential(
+                _init_linear(nn.Linear(32 * 4 * 5, self.hidden_size)),
+                nn.ReLU(),
+            )
+            self.entity_encoder = nn.Sequential(
+                _init_linear(nn.Linear(entity_input_size, self.hidden_size)),
+                nn.ReLU(),
+                _init_linear(nn.Linear(self.hidden_size, self.hidden_size)),
+                nn.ReLU(),
+            )
+            self.entity_attn = _init_linear(nn.Linear(self.hidden_size, 2), gain=1.0)
+            self.entity_proj = nn.Sequential(
+                _init_linear(nn.Linear(self.hidden_size * 3, 128)),
+                nn.ReLU(),
+            )
+            self.vitals_encoder = nn.Sequential(
+                _init_linear(nn.Linear(len(doom_spaces.VITALS_FIELDS) + ACTION_DIM, self.hidden_size)),
+                nn.ReLU(),
+                _init_linear(nn.Linear(self.hidden_size, self.hidden_size)),
+                nn.ReLU(),
+            )
+            fused_in = self.fusion_size + self.hidden_size + 128 + self.hidden_size
+            self.fusion = nn.Sequential(
+                _init_linear(nn.Linear(fused_in, self.fusion_size)),
+                nn.LayerNorm(self.fusion_size),
+                nn.ReLU(),
+            )
+            self.gru = nn.GRU(self.fusion_size, self.fusion_size, num_layers=2, batch_first=True)
+            for name, param in self.gru.named_parameters():
+                if "bias" in name:
+                    nn.init.constant_(param, 0.0)
+                elif "weight" in name:
+                    nn.init.orthogonal_(param)
+            self.core_norm = nn.LayerNorm(self.fusion_size)
+            self.actor = _init_linear(nn.Linear(self.fusion_size, output_size), gain=0.01)
+            with torch.no_grad():
+                self.actor.bias.copy_(torch.tensor([
+                    0.0, 0.5, -0.5,
+                    0.4, 0.0, 0.0,
+                    0.0, 0.0, 0.0,
+                    -1.0, -1.8, -3.0,
+                ], dtype=self.actor.bias.dtype))
+            self.critic = _init_linear(nn.Linear(self.fusion_size, 1), gain=1.0)
+        elif self.is_recurrent:
             self.ray_conv = nn.Sequential(
                 nn.Conv1d(ray_in_channels, self.hidden_size, kernel_size=5, padding=2, padding_mode="circular"),
                 nn.ReLU(),
                 nn.Conv1d(self.hidden_size, self.hidden_size, kernel_size=5, padding=2, padding_mode="circular"),
                 nn.ReLU(),
             )
-            # 8 angular sectors x (mean + max) = 16 * hidden_size
             self.ray_proj = nn.Sequential(
                 _init_linear(nn.Linear(self.hidden_size * 16, self.fusion_size)),
                 nn.ReLU(),
@@ -107,14 +194,12 @@ class DoomPolicy(nn.Module):
                 elif "weight" in name:
                     nn.init.orthogonal_(param)
             self.actor = _init_linear(nn.Linear(self.fusion_size, output_size), gain=0.01)
-            # Initialize action logit priors so initial exploration walks forward
-            # without randomly toggling to Fist or spamming USE on step 0.
             with torch.no_grad():
                 self.actor.bias.copy_(torch.tensor([
-                    0.0, 0.5, -0.5,   # forward/back: none, forward, backward
-                    0.4, 0.0, 0.0,    # strafe: none, left, right
-                    0.0, 0.0, 0.0,    # turn: none, left, right
-                    -1.0, -1.8, -3.0, # ATTACK, USE, SELECT_NEXT_WEAPON
+                    0.0, 0.5, -0.5,
+                    0.4, 0.0, 0.0,
+                    0.0, 0.0, 0.0,
+                    -1.0, -1.8, -3.0,
                 ], dtype=self.actor.bias.dtype))
             self.critic = _init_linear(nn.Linear(self.fusion_size, 1), gain=1.0)
         else:
@@ -136,7 +221,6 @@ class DoomPolicy(nn.Module):
                 nn.Linear(self.hidden_size, self.hidden_size),
                 nn.ReLU(),
             )
-            # Mean and max pools preserve both the overall scene and its strongest cue.
             fused_size = self.hidden_size * 5
             self.fusion = nn.Sequential(
                 nn.Linear(fused_size, self.fusion_size),
@@ -165,10 +249,11 @@ class DoomPolicy(nn.Module):
         mask = mask.bool()
         expanded = mask.unsqueeze(-1)
         has_any = expanded.any(dim=1)
-        attn_scores = self.entity_attn(features).squeeze(-1)
-        attn_scores = attn_scores.masked_fill(~mask, -1e9)
-        attn_weights = F.softmax(attn_scores, dim=1) * mask.to(features.dtype)
-        attn_sum = torch.sum(features * attn_weights.unsqueeze(-1), dim=1)
+        attn_scores = self.entity_attn(features)  # [B, 32, K]
+        attn_scores = attn_scores.masked_fill(~expanded, -1e9)
+        attn_weights = F.softmax(attn_scores, dim=1) * expanded.to(features.dtype)
+        # [B, 32, K, 1] * [B, 32, 1, C] -> [B, K*C]
+        attn_sum = torch.sum(features.unsqueeze(2) * attn_weights.unsqueeze(-1), dim=1).flatten(start_dim=1)
         maximum = features.masked_fill(~expanded, torch.finfo(features.dtype).min).amax(dim=1)
         maximum = torch.where(has_any, maximum, torch.zeros_like(maximum))
         return torch.cat((attn_sum, maximum), dim=-1)
@@ -191,13 +276,8 @@ class DoomPolicy(nn.Module):
         batch_size = rays.shape[0]
 
         directions = self.ray_directions.to(dtype=rays.dtype).unsqueeze(0).expand(batch_size, -1, -1)
-        rays_dir = torch.cat((rays, directions), dim=-1)  # [B, 64, 9]
-        conv_out = self.ray_conv(rays_dir.transpose(1, 2))  # [B, C, 64]
-        # Shift by +4 rays so Sector 0 is centered straight ahead ([-22.5, +22.5] deg).
-        sectors = torch.roll(conv_out, shifts=4, dims=-1).reshape(batch_size, self.hidden_size, 8, 8)
-        sector_mean = sectors.mean(dim=-1)
-        sector_max = sectors.amax(dim=-1)
-        ray_summary = self.ray_proj(torch.cat((sector_mean, sector_max), dim=1).flatten(start_dim=1))
+        rays_dir = torch.cat((rays, directions), dim=-1)
+        conv_out = self.ray_conv(rays_dir.transpose(1, 2))
 
         entities = torch.cat((entity_features, entity_type), dim=-1)
         entity_embedding = self.entity_encoder(entities)
@@ -213,6 +293,27 @@ class DoomPolicy(nn.Module):
         vitals_in = torch.cat((vitals, prev_action), dim=-1)
         vitals_embedding = self.vitals_encoder(vitals_in)
 
+        if self.use_depth:
+            # 16 sectors of 4 rays each, shifted +2 so Sector 0 centers straight ahead.
+            sectors = torch.roll(conv_out, shifts=2, dims=-1).reshape(batch_size, self.hidden_size, 16, 4)
+            ray_summary = self.ray_proj(torch.cat((sectors.mean(dim=-1), sectors.amax(dim=-1)), dim=1).flatten(start_dim=1))
+
+            depth = encoded_obs.get("depth")
+            if depth is None:
+                depth_in = torch.zeros((batch_size, 1, 15, 20), dtype=vitals.dtype, device=vitals.device)
+            else:
+                depth_t = depth.to(dtype=vitals.dtype, device=vitals.device)
+                if depth_t.shape[-2:] == (120, 160):
+                    depth_t = F.avg_pool2d(depth_t.unsqueeze(1) / 255.0, kernel_size=8, stride=8)
+                else:
+                    depth_t = depth_t.unsqueeze(1)
+                depth_in = depth_t
+            depth_summary = self.depth_proj(self.depth_cnn(depth_in).flatten(start_dim=1))
+            entity_summary = self.entity_proj(entity_summary)
+            return self.fusion(torch.cat((ray_summary, depth_summary, entity_summary, vitals_embedding), dim=-1))
+
+        sectors = torch.roll(conv_out, shifts=4, dims=-1).reshape(batch_size, self.hidden_size, 8, 8)
+        ray_summary = self.ray_proj(torch.cat((sectors.mean(dim=-1), sectors.amax(dim=-1)), dim=1).flatten(start_dim=1))
         return self.fusion(torch.cat((ray_summary, entity_summary, vitals_embedding), dim=-1))
 
     def forward(self, encoded_obs: dict[str, torch.Tensor], hidden_state=None):
@@ -228,6 +329,8 @@ class DoomPolicy(nn.Module):
                 h0 = hidden_state.to(device=fused.device, dtype=fused.dtype)
             gru_out, next_hidden = self.gru(fused.unsqueeze(1), h0)
             core = gru_out.squeeze(1)
+            if self.use_depth:
+                core = self.core_norm(core + fused)
             logits = self.actor(core)
             value = self.critic(core).squeeze(-1)
             return logits, value, next_hidden
@@ -260,10 +363,7 @@ class DoomPolicy(nn.Module):
         dones: torch.Tensor,
         initial_hidden: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None]:
-        """Vectorized sequence forward over ``[B, T, ...]`` chunks for recurrent PPO.
-
-        Resets hidden state after step ``t`` whenever ``dones[b, t]`` is nonzero.
-        """
+        """Vectorized sequence forward over ``[B, T, ...]`` chunks for recurrent PPO."""
         if not self.is_recurrent:
             raise RuntimeError("forward_sequence is only supported for recurrent architectures")
 
@@ -292,7 +392,9 @@ class DoomPolicy(nn.Module):
             reset_mask = (1.0 - dones_dev[:, t]).view(1, batch_size, 1)
             h = h * reset_mask
 
-        core = torch.cat(outputs, dim=1)  # [B, T, fusion_size]
+        core = torch.cat(outputs, dim=1)
+        if self.use_depth:
+            core = self.core_norm(core + fused)
         logits = self.actor(core)
         values = self.critic(core).squeeze(-1)
         return logits, values, h
@@ -302,9 +404,9 @@ class DoomPolicy(nn.Module):
         return self.forward(encoded_obs, hidden_state=hidden_state)
 
     def init_hidden(self, batch_size: int = 1, device: torch.device | str | None = None):
-        """Return initial hidden state for agent (zeros for GRU, None for feed-forward)."""
+        """Return initial hidden state for agent ([L, B, H] for GRU, None for feed-forward)."""
         if self.is_recurrent:
-            return torch.zeros(1, batch_size, self.fusion_size, device=device)
+            return torch.zeros(self.gru_layers, batch_size, self.fusion_size, device=device)
         return None
 
 
@@ -317,8 +419,13 @@ def build_policy(config=None, **kwargs) -> DoomPolicy:
         arch = getattr(config, "architecture_id", arch)
     elif "architecture_id" in kwargs:
         arch = kwargs["architecture_id"]
-    default_hidden = 64 if arch == SPATIAL_GRU_ARCHITECTURE_ID else 32
-    defaults = {"hidden_size": default_hidden, "fusion_size": 128, "architecture_id": arch}
+    if arch == SPATIAL_DEPTH_GRU_ARCHITECTURE_ID:
+        default_hidden, default_fusion = 96, 256
+    elif arch == SPATIAL_GRU_ARCHITECTURE_ID:
+        default_hidden, default_fusion = 64, 128
+    else:
+        default_hidden, default_fusion = 32, 128
+    defaults = {"hidden_size": default_hidden, "fusion_size": default_fusion, "architecture_id": arch}
     if isinstance(config, Mapping):
         values = {key: config.get(key, default) for key, default in defaults.items()}
     elif config is not None:

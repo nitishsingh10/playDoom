@@ -53,7 +53,7 @@ def format_action(raw_action: Any) -> np.ndarray:
     return np.clip(action, 0, 1)
 
 
-_default_encoder = None
+_default_encoders: dict[bool, ObservationEncoder] = {}
 
 
 def preprocess_observation(
@@ -62,10 +62,11 @@ def preprocess_observation(
     include_depth: bool = False,
 ) -> dict[str, np.ndarray]:
     """Preprocess observation dict using ObservationEncoder, returning numpy arrays."""
-    global _default_encoder
-    if _default_encoder is None:
-        _default_encoder = ObservationEncoder(device="cpu")
-    encoded = _default_encoder(observation)
+    enc = _default_encoders.get(bool(include_depth))
+    if enc is None:
+        enc = ObservationEncoder(device="cpu", include_depth=bool(include_depth))
+        _default_encoders[bool(include_depth)] = enc
+    encoded = enc(observation)
     return {
         k: v.squeeze(0).cpu().numpy() if v.ndim > 0 and v.shape[0] == 1 else v.cpu().numpy()
         for k, v in encoded.items()

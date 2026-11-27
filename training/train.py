@@ -101,6 +101,15 @@ def train_loop(
 
     for update in range(start_update, total_updates + 1):
         t_update_start = time.time()
+        frac = (update - 1) / max(1, total_updates - 1)
+        if cfg.get("lr_end") is not None:
+            cur_lr = float(cfg["lr"]) + frac * (float(cfg["lr_end"]) - float(cfg["lr"]))
+            for pg in optimizer.param_groups:
+                pg["lr"] = cur_lr
+        if cfg.get("ent_coef_end") is not None:
+            cfg["ent_coef"] = float(cfg.get("ent_coef_start", cfg["ent_coef"])) + frac * (
+                float(cfg["ent_coef_end"]) - float(cfg.get("ent_coef_start", cfg["ent_coef"]))
+            )
 
         rollout_data = collector.collect(model, num_steps=rollout_steps)
 
@@ -226,8 +235,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--minibatch-size", type=int, default=64)
     parser.add_argument("--seq-len", type=int, default=32, help="Sequence chunk length for recurrent PPO")
     parser.add_argument("--epochs", type=int, default=4)
-    parser.add_argument("--lr", type=float, default=3e-4, help="Learning rate")
-    parser.add_argument("--ent-coef", type=float, default=0.01, help="Entropy bonus coefficient")
+    parser.add_argument("--lr", type=float, default=3e-4, help="Initial learning rate")
+    parser.add_argument("--lr-end", type=float, default=None, help="Optional final LR for linear decay")
+    parser.add_argument("--ent-coef", type=float, default=0.01, help="Initial entropy bonus coefficient")
+    parser.add_argument("--ent-coef-end", type=float, default=None, help="Optional final entropy coef")
     parser.add_argument("--num-envs", type=int, default=1, help="Number of parallel ViZDoom workers")
     parser.add_argument("--checkpoint-interval", type=int, default=25)
     parser.add_argument("--device", choices=("cpu", "cuda"), default="cuda" if torch.cuda.is_available() else "cpu")
@@ -242,7 +253,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--log-dir", type=str, default=None)
     parser.add_argument("--resume", type=str, default=None, help="Path to checkpoint to resume")
     parser.add_argument("--hidden-size", type=int, default=None)
-    parser.add_argument("--fusion-size", type=int, default=128)
+    parser.add_argument("--fusion-size", type=int, default=None)
     parser.add_argument(
         "--architecture",
         choices=sorted(STRUCTURED_ARCHITECTURES),
@@ -258,7 +269,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     from submission.model import DoomPolicy
     from training.envs import MapCyclerEnv, SubprocVecEnv, default_curriculum_maps, default_training_maps
     from training.metrics import MetricsLogger
-    from training.rewards import RewardShaper
+    from training.rewards import RewardConfig, RewardShaper
     from training.rollout import RolloutCollector, VecRolloutCollector
 
     random.seed(args.seed)
@@ -275,6 +286,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     else:
         maps = default_training_maps()
 
+    policy = DoomPolicy(
+        hidden_size=args.hidden_size,
+        fusion_size=args.fusion_size,
+        architecture_id=args.architecture,
+    )
     logger = MetricsLogger(log_dir=args.log_dir)
     if args.num_envs > 1:
         env = SubprocVecEnv(
@@ -283,16 +299,18 @@ def main(argv: Optional[list[str]] = None) -> int:
             episode_ticks=args.episode_ticks,
             seed=args.seed,
             random_map_prob=args.random_map_prob,
+            render_buffers=bool(policy.use_depth),
         )
-        collector = VecRolloutCollector(env, shaper_factory=RewardShaper, metrics_logger=logger, device=args.device)
+        collector = VecRolloutCollector(env, shaper_factory=lambda: RewardShaper(RewardConfig(macro_exploration_reward=0.5)), metrics_logger=logger, device=args.device)
     else:
         env = MapCyclerEnv(
             maps,
             episode_ticks=args.episode_ticks,
             seed=args.seed,
             random_map_prob=args.random_map_prob,
+            render_buffers=bool(policy.use_depth),
         )
-        collector = RolloutCollector(env, shaper=RewardShaper(), metrics_logger=logger, device=args.device, seed=args.seed)
+        collector = RolloutCollector(env, shaper=RewardShaper(RewardConfig(macro_exploration_reward=0.5)), metrics_logger=logger, device=args.device, seed=args.seed)
 
     config = default_train_config()
     config.update({
@@ -302,16 +320,14 @@ def main(argv: Optional[list[str]] = None) -> int:
         "seq_len": args.seq_len,
         "update_epochs": args.epochs,
         "lr": args.lr,
+        "lr_end": args.lr_end,
         "ent_coef": args.ent_coef,
+        "ent_coef_start": args.ent_coef,
+        "ent_coef_end": args.ent_coef_end,
         "checkpoint_interval": args.checkpoint_interval,
         "device": args.device,
         "save_dir": args.save_dir,
     })
-    policy = DoomPolicy(
-        hidden_size=args.hidden_size,
-        fusion_size=args.fusion_size,
-        architecture_id=args.architecture,
-    )
     try:
         summary = train_loop(policy, collector, config=config, resume_path=args.resume, metrics_logger=logger)
         logger.save_json("training_metrics.json")

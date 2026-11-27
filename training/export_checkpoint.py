@@ -13,6 +13,7 @@ import torch
 from submission.checkpoint import (
     CHECKPOINT_VERSION,
     DIRECTIONAL_ARCHITECTURE_ID,
+    SPATIAL_DEPTH_GRU_ARCHITECTURE_ID,
     SPATIAL_GRU_ARCHITECTURE_ID,
     SUPPORTED_ARCHITECTURES,
     CheckpointCompatibilityError,
@@ -55,6 +56,8 @@ def export_checkpoint(
     if architecture_id not in SUPPORTED_ARCHITECTURES:
         raise CheckpointCompatibilityError("Cannot export an unidentified DoomPolicy architecture.")
     default_output = (
+        Path("training/runs/spatial_gru_v4/export/checkpoint.pt")
+        if architecture_id == SPATIAL_DEPTH_GRU_ARCHITECTURE_ID else
         Path("training/runs/spatial_gru_v3/export/checkpoint.pt")
         if architecture_id == SPATIAL_GRU_ARCHITECTURE_ID else
         Path("training/runs/structured_ray_v2/export/checkpoint.pt")
@@ -75,8 +78,8 @@ def export_checkpoint(
     }
     # Raw legacy weights predate metadata; encoder dimensions recover the exact
     # model widths without changing, resizing or dropping a single parameter.
-    hidden_weight_key = "ray_conv.0.weight" if architecture_id == SPATIAL_GRU_ARCHITECTURE_ID else "ray_encoder.0.weight"
-    expected_ndim = 3 if architecture_id == SPATIAL_GRU_ARCHITECTURE_ID else 2
+    hidden_weight_key = "ray_conv.0.weight" if architecture_id in (SPATIAL_GRU_ARCHITECTURE_ID, SPATIAL_DEPTH_GRU_ARCHITECTURE_ID) else "ray_encoder.0.weight"
+    expected_ndim = 3 if architecture_id in (SPATIAL_GRU_ARCHITECTURE_ID, SPATIAL_DEPTH_GRU_ARCHITECTURE_ID) else 2
     for key, weight_key, ndim in (("hidden_size", hidden_weight_key, expected_ndim), ("fusion_size", "fusion.0.weight", 2)):
         inferred = state_dict.get(weight_key)
         if inferred is None or inferred.ndim != ndim:
@@ -86,6 +89,8 @@ def export_checkpoint(
             raise CheckpointCompatibilityError(f"Checkpoint {key} metadata disagrees with its weights.")
         config_values[key] = inferred.shape[0]
     config_values["architecture_id"] = architecture_id
+    if architecture_id == SPATIAL_DEPTH_GRU_ARCHITECTURE_ID:
+        config_values["use_depth"] = True
     if deterministic_eval is not None:
         config_values["deterministic_eval"] = deterministic_eval
     model = DoomPolicy(

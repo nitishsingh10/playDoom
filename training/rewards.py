@@ -49,6 +49,8 @@ class RewardConfig:
     # Exploration & Movement
     cell_size: float = 64.0  # Map units per spatial grid cell
     exploration_reward: float = 0.5  # Awarded once per unique cell visited per episode
+    macro_cell_size: float = 128.0
+    macro_exploration_reward: float = 0.0  # Extra bonus for entering a genuinely new room quadrant
     reset_exploration_on_key: bool = True
     movement_reward_coef: float = 0.001  # Small reward for translation
     max_movement_reward_per_step: float = 0.05
@@ -74,6 +76,7 @@ class RewardShaper:
     def __init__(self, config: Optional[RewardConfig] = None):
         self.config = config or RewardConfig()
         self.visited_cells: Set[Tuple[int, int]] = set()
+        self.visited_macro_cells: Set[Tuple[int, int]] = set()
         self.opened_doors: Set[int] = set()
         self.prev_privileged: Optional[Dict[str, Any]] = None
         self.step_count: int = 0
@@ -106,6 +109,7 @@ class RewardShaper:
     def reset(self, initial_privileged: Optional[Dict[str, Any]] = None) -> None:
         """Reset internal trackers at the beginning of an episode."""
         self.visited_cells.clear()
+        self.visited_macro_cells.clear()
         self.opened_doors.clear()
         self.step_count = 0
         self.previous_use_pressed = False
@@ -121,6 +125,8 @@ class RewardShaper:
             y = initial_privileged.get("y", 0.0)
             cell = (int(x // self.config.cell_size), int(y // self.config.cell_size))
             self.visited_cells.add(cell)
+            mcell = (int(x // self.config.macro_cell_size), int(y // self.config.macro_cell_size))
+            self.visited_macro_cells.add(mcell)
             # Mark any initially open doors so they are never rewarded
             door_lock = initial_privileged.get("door_lock")
             sector_ceil = initial_privileged.get("sector_ceiling")
@@ -179,6 +185,7 @@ class RewardShaper:
                 components["key"] += float(new_keys) * cfg.key_reward
                 if cfg.reset_exploration_on_key:
                     self.visited_cells.clear()
+                    self.visited_macro_cells.clear()
                     # Allow re-opening currently closed normal doors once after key pickup
                     # so backtracking out of a keycard room gets guided properly.
                     dl = curr_privileged.get("door_lock")
@@ -219,6 +226,11 @@ class RewardShaper:
 
         cell = (int(curr_x // cfg.cell_size), int(curr_y // cfg.cell_size))
         new_cell = cell not in self.visited_cells
+        mcell = (int(curr_x // cfg.macro_cell_size), int(curr_y // cfg.macro_cell_size))
+        new_mcell = mcell not in self.visited_macro_cells
+        if new_mcell:
+            self.visited_macro_cells.add(mcell)
+            components["exploration"] += cfg.macro_exploration_reward
         if new_cell:
             self.visited_cells.add(cell)
             components["exploration"] += cfg.exploration_reward

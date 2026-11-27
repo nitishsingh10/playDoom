@@ -141,8 +141,11 @@ def _ppo_update_recurrent(
         old_values = old_values.unsqueeze(1)
         dones = dones.unsqueeze(1)
         init_hiddens = init_hiddens.unsqueeze(1)
+    if init_hiddens.ndim == 3:
+        init_hiddens = init_hiddens.unsqueeze(2)  # [T, N, 1, H]
 
     T, N = old_log_probs.shape
+    num_layers, hidden_dim = init_hiddens.shape[2], init_hiddens.shape[3]
     seq_len = min(int(config.get("seq_len", 32)), T)
     while seq_len > 1 and T % seq_len != 0:
         seq_len -= 1
@@ -156,11 +159,11 @@ def _ppo_update_recurrent(
     chunked_adv = _chunk_time_env(advantages, num_seq, seq_len, N)
     chunked_old_val = _chunk_time_env(old_values, num_seq, seq_len, N)
     chunked_dones = _chunk_time_env(dones, num_seq, seq_len, N)
-    # Initial hidden at start of each chunk: [num_seq, N, H] -> [1, num_chunks, H]
+    # Initial hidden at start of each chunk: [num_seq, N, L, H] -> [num_chunks, L, H]
     chunk_init_h = (
         init_hiddens[::seq_len]
-        .permute(1, 0, 2)
-        .reshape(num_chunks, init_hiddens.shape[-1])
+        .permute(1, 0, 2, 3)
+        .reshape(num_chunks, num_layers, hidden_dim)
     )
 
     mb_chunks = max(1, min(num_chunks, minibatch_size // seq_len))
@@ -177,7 +180,7 @@ def _ppo_update_recurrent(
             mb_adv = chunked_adv[idx]
             mb_old_val = chunked_old_val[idx]
             mb_dones = chunked_dones[idx]
-            mb_h0 = chunk_init_h[idx].unsqueeze(0)
+            mb_h0 = chunk_init_h[idx].permute(1, 0, 2).contiguous()  # [L, mb_chunks, H]
 
             if normalize_advantages and mb_adv.numel() > 1:
                 mb_adv = (mb_adv - mb_adv.mean()) / (mb_adv.std() + 1e-8)

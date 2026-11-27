@@ -142,8 +142,13 @@ def load_policy(checkpoint_path: str | Path, device: str, *, legacy_baseline: bo
         raise ValueError(f"Checkpoint architecture {architecture!r} does not match requested {requested!r}.{hint}")
     state = extract_state_dict(checkpoint)
     # Recover dimensions even for historical state_dict-only baselines.
+    hidden_size = (
+        int(state["ray_conv.0.weight"].shape[0])
+        if "ray_conv.0.weight" in state
+        else int(state["actor.weight"].shape[1] // 2)
+    )
     model = DoomPolicy(
-        hidden_size=int(state["actor.weight"].shape[1] // 2),
+        hidden_size=hidden_size,
         fusion_size=int(state["fusion.0.weight"].shape[0]), architecture_id=requested,
     )
     load_policy_state(model, checkpoint)
@@ -175,13 +180,13 @@ def evaluate_checkpoint(
     ActionDiagnostics(useful_range_units=useful_range_units)
     torch.set_num_threads(1)
     model = load_policy(checkpoint_path, device, legacy_baseline=legacy_baseline)
-    encoder = ObservationEncoder(device=device)
+    encoder = ObservationEncoder(device=device, include_depth=bool(getattr(model, "use_depth", False)))
     records = []
     for spec in maps:
         wad, map_name = _map_spec(spec)
         for seed in seeds:
             torch.manual_seed(seed)  # Reproducible sampled actions per episode.
-            env = make_env(wad, map_name, episode_ticks=episode_ticks, render_buffers=False)
+            env = make_env(wad, map_name, episode_ticks=episode_ticks, render_buffers=bool(getattr(model, "use_depth", False)))
             try:
                 observation, _ = env.reset(seed=seed)
                 state = env.privileged_state()
